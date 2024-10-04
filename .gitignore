@@ -1,0 +1,12 @@
+# Ignora archivos .env
+.env
+
+# Ignora cachés de Python
+__pycache__/
+*.py[cod]
+*$py.class
+# C extensiones
+*.so
+
+# Ignora archivos .pt
+*.pt
