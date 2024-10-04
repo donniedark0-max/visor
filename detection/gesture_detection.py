@@ -14,9 +14,13 @@ from gpt.gpt_description import generar_descripcion, hablar_texto
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
 mp_draw = mp.solutions.drawing_utils
-model = YOLO('yolov10n.pt')
 
-juan_image = face_recognition.load_image_file("assets/img/juan.jpeg")
+# Modelos
+model1 = YOLO('yolov10n.pt')
+model2 = YOLO('/Users/dark0/Documents/Visor/assets/models/train13/weights/best.pt')
+
+
+juan_image = face_recognition.load_image_file("/Users/dark0/Documents/Visor/assets/img/juan.jpeg")
 juan_encoding = face_recognition.face_encodings(juan_image)[0]
 
 # Cola para pasar el frame a OpenGL
@@ -68,6 +72,47 @@ def reiniciar_programa():
 
 def cerrar_programa():
     root.quit() 
+
+
+# Función para verificar si los dedos están extendidos
+def dedos_extendidos(hand_landmarks):
+    """
+    Verifica si los dedos están extendidos.
+    Devuelve True si todos los dedos están extendidos.
+    """
+    # Landmarks de los dedos
+    dedos_landmarks = [
+        mp_hands.HandLandmark.INDEX_FINGER_TIP,
+        mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
+        mp_hands.HandLandmark.RING_FINGER_TIP,
+        mp_hands.HandLandmark.PINKY_TIP
+    ]
+
+    # Verificar si cada dedo está más arriba que el nudillo correspondiente
+    for landmark in dedos_landmarks:
+        if hand_landmarks.landmark[landmark].y > hand_landmarks.landmark[landmark - 2].y:
+            return False  # Si un dedo no está extendido, devuelve False
+    return True
+
+
+# Función para detectar el gesto de saludo
+def detectar_gesto_saludo(hand_landmarks):
+    """
+    Detecta si el gesto de saludo está presente.
+    """
+    # Detectar si la palma está hacia la cámara
+    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+    index_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+    middle_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
+
+    # Si la palma está orientada hacia la cámara (los puntos de los nudillos de los dedos índice y medio están debajo de la muñeca)
+    palma_orientada = wrist.z < index_mcp.z and wrist.z < middle_mcp.z
+
+    # Verificar si los dedos están extendidos (excepto el pulgar)
+    if palma_orientada and dedos_extendidos(hand_landmarks):
+        return True  # Gesto de saludo detectado
+    return False
+
 
 def detect_gestures_and_objects():
     global hand_position, finger_distance, detected_objects, gesture_action
@@ -140,23 +185,32 @@ def detect_gestures_and_objects():
                     else:
                         gesture_action = None
 
+                    # Detectar si el gesto de saludo está presente
+                    if detectar_gesto_saludo(hand_landmarks):
+                        print("Saludo detectado")
+                        # Puedes hacer algo aquí, como agregar el gesto al contexto
+                        contexto["gestos_detectados"].append("Saludo")
+                
+
                     if gesture_action and gesture_action not in contexto["gestos_detectados"]:
                         contexto["gestos_detectados"].append(gesture_action)
 
-            # Detección de objetos con YOLO
-            yolo_results = model(frame, show=False)
+           
 
-            for result in yolo_results:
-                for obj in result.boxes:
-                    x1, y1, x2, y2 = map(int, obj.xyxy[0])
-                    class_id = int(obj.cls)
-                    confidence = obj.conf
-                    label = f'{model.names[class_id]} {float(confidence):.2f}'
-                    detected_objects.append(label)
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-                    
-                    object_count[label] += 1
+            for model in [model1, model2]:
+                # Detección de objetos con YOLO
+                yolo_results = model(frame, show=False)
+                for result in yolo_results:
+                    for obj in result.boxes:
+                        x1, y1, x2, y2 = map(int, obj.xyxy[0])
+                        class_id = int(obj.cls)
+                        confidence = obj.conf
+                        label = f'{model.names[class_id]} {float(confidence):.2f}'
+                        detected_objects.append(label)
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                        
+                        object_count[label] += 1
 
             cv2.imshow('Detección de Objetos y Gestos', frame)    
 
