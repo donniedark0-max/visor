@@ -26,7 +26,7 @@ def generar_descripcion(objetos_detectados, gestos_detectados):
         response = model.generate_content(
             prompt,
             generation_config=genai.types.GenerationConfig(
-                max_output_tokens=20,  
+                max_output_tokens=30,  
                 temperature=0.2,  
             ),
         )

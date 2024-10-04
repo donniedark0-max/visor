@@ -9,3 +9,8 @@ __pycache__/
 
 # Ignora archivos .pt
 *.pt
+
+#ignora fotos
+**/.jpg
+**/.jpeg
+**/.png

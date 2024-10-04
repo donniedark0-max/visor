@@ -3,6 +3,11 @@ import mediapipe as mp
 import math
 from queue import Queue
 from ultralytics import YOLO
+import tkinter as tk
+from tkinter import Button, Label
+import time
+from collections import defaultdict
+import face_recognition
 from gpt.gpt_description import generar_descripcion, hablar_texto
 
 # Inicializar MediaPipe y YOLO
@@ -11,35 +16,100 @@ hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7
 mp_draw = mp.solutions.drawing_utils
 model = YOLO('yolov10n.pt')
 
+juan_image = face_recognition.load_image_file("assets/img/juan.jpeg")
+juan_encoding = face_recognition.face_encodings(juan_image)[0]
+
 # Cola para pasar el frame a OpenGL
 frame_queue = Queue(maxsize=1)
 
 # Variables globales
+paused = False
+capturing = False
 hand_position = [0.0, 0.0]
 finger_distance = 0.0
 detected_objects = []
 gesture_action = None
+
+# Variable para almacenar el contador de objetos detectados
+object_count = defaultdict(int)  # Almacena el conteo de cada objeto
+frame_window = 30  # Ventana de tiempo en cuadros
+current_frame = 0  # Llevar cuenta de los cuadros procesados
+
 
 contexto = {
     "objetos_detectados": [],
     "gestos_detectados": []
 }
 
+# Función para iniciar la detección
+def iniciar_deteccion():
+    global capturing
+    capturing = True
+    detect_gestures_and_objects()
+
+# Función para detener la detección
+def detener_deteccion():
+    global capturing
+    capturing = False
+
+# Función para pausar/reanudar
+def toggle_pause():
+    global paused
+    paused = not paused
+
+def reiniciar_programa():
+    # Reiniciar el diccionario de contexto y despausar el programa
+    global contexto
+    contexto = {
+        "objetos_detectados": [],
+        "gestos_detectados": []
+    }
+    toggle_pause()  # Despausar la captura de gestos y objetos para reiniciar
+
+def cerrar_programa():
+    root.quit() 
+
 def detect_gestures_and_objects():
     global hand_position, finger_distance, detected_objects, gesture_action
     cap = cv2.VideoCapture(1)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    start_time = time.time()
 
     if not cap.isOpened():
         print("Error: No se pudo abrir la cámara.")
         return
 
     try:
-        while True:
+        while capturing:
             ret, frame = cap.read()
             if not ret:
                 print("Error: No se pudo capturar el frame.")
+                break
+
+            # Detección de rostro
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            face_locations = face_recognition.face_locations(rgb_frame)
+            face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+
+            for face_encoding in face_encodings:
+                matches = face_recognition.compare_faces([juan_encoding], face_encoding)
+                if True in matches:
+                    if "Juan" not in contexto["objetos_detectados"]:
+                        contexto["objetos_detectados"].append("Juan está en pantalla")
+
+            if time.time() - start_time > 5:  # Limitar a 5 segundos de captura
+                print("Límite de tiempo alcanzado. Procesando datos...")
+
+                 # Seleccionar el objeto detectado más frecuentemente
+                objeto_mas_frecuente = max(object_count, key=object_count.get)
+                contexto["objetos_detectados"] = [objeto_mas_frecuente]
+
+                descripcion = generar_descripcion(contexto["objetos_detectados"], ", ".join(contexto["gestos_detectados"]))
+                print(descripcion)
+                hablar_texto(descripcion)
+
+                detener_deteccion()
                 break
 
             # Detección de gestos
@@ -65,7 +135,7 @@ def detect_gestures_and_objects():
                     finger_distance = math.sqrt(dx ** 2 + dy ** 2)
 
                      # Asignar una acción en función del gesto
-                    if finger_distance < 0.05:
+                    if finger_distance < 0.2:
                         gesture_action = "Pinza"
                     else:
                         gesture_action = None
@@ -76,7 +146,6 @@ def detect_gestures_and_objects():
             # Detección de objetos con YOLO
             yolo_results = model(frame, show=False)
 
-            detected_objects = []
             for result in yolo_results:
                 for obj in result.boxes:
                     x1, y1, x2, y2 = map(int, obj.xyxy[0])
@@ -87,28 +156,13 @@ def detect_gestures_and_objects():
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
                     cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
                     
-                    # Almacenar el objeto detectado en el diccionario
-                    if label not in contexto["objetos_detectados"]:
-                        contexto["objetos_detectados"].append(label)
-
-            # Generar narrativa de la escena basada en objetos y gestos cada cierto tiempo
-            if contexto["objetos_detectados"] and contexto["gestos_detectados"]:
-                descripcion = generar_descripcion(contexto["objetos_detectados"], ", ".join(contexto["gestos_detectados"]))
-                print(descripcion)
-                hablar_texto(descripcion)  
-
-
-            # Mandar el frame a OpenGL
-            if not frame_queue.full():
-                frame_queue.put(frame)
-            else:
-                frame_queue.get()
-                frame_queue.put(frame)
+                    object_count[label] += 1
 
             cv2.imshow('Detección de Objetos y Gestos', frame)    
 
             # Salir si se presiona la tecla 'q'
             if cv2.waitKey(1) & 0xFF == ord('q'):
+                detener_deteccion()
                 break
 
     except Exception as e:
@@ -116,3 +170,22 @@ def detect_gestures_and_objects():
     finally:
         cap.release()
         cv2.destroyAllWindows()
+
+# Crear la interfaz gráfica con Tkinter
+root = tk.Tk()
+root.title("Control de Cámara")
+
+# Botones
+btn_iniciar = Button(root, text="Iniciar Detección", command=iniciar_deteccion)
+btn_iniciar.pack(pady=10)
+
+# Botón para reiniciar el programa
+btn_reiniciar = Button(root, text="Reiniciar", command=reiniciar_programa)
+btn_reiniciar.pack(pady=10)
+
+# Botón para cerrar el programa
+btn_salir = Button(root, text="Salir", command=cerrar_programa)
+btn_salir.pack(pady=10)
+
+# Ejecutar la ventana de Tkinter
+root.mainloop()
