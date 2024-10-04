@@ -137,11 +137,19 @@ def detect_gestures_and_objects():
             face_locations = face_recognition.face_locations(rgb_frame)
             face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
+            juan_en_pantalla = False
+
             for face_encoding in face_encodings:
                 matches = face_recognition.compare_faces([juan_encoding], face_encoding)
+
                 if True in matches:
+                    juan_en_pantalla = True
                     if "Juan" not in contexto["objetos_detectados"]:
                         contexto["objetos_detectados"].append("Juan está en pantalla")
+                        print("Juan está en pantalla")
+
+            if not juan_en_pantalla:
+                print("Juan no está en pantalla.")
 
             if time.time() - start_time > 5:  # Limitar a 5 segundos de captura
                 print("Límite de tiempo alcanzado. Procesando datos...")
@@ -180,7 +188,7 @@ def detect_gestures_and_objects():
                     finger_distance = math.sqrt(dx ** 2 + dy ** 2)
 
                      # Asignar una acción en función del gesto
-                    if finger_distance < 0.2:
+                    if finger_distance < 0.02:
                         gesture_action = "Pinza"
                     else:
                         gesture_action = None
