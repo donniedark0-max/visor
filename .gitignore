@@ -1,6 +1,5 @@
 # Ignora archivos .env xd
-.env
-
+**/.env
 # Ignora cachés de Python
 __pycache__/
 *.py[cod]

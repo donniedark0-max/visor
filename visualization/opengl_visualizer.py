@@ -2,7 +2,7 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 import cv2
-from detection.gesture_detection import frame_queue, hand_position, finger_distance
+#from detection.gesture_detection import frame_queue, hand_position, finger_distance
 # import math
 # Variables globales
 camera_texture_id = None

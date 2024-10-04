@@ -3,13 +3,13 @@ import mediapipe as mp
 import math
 from queue import Queue
 from ultralytics import YOLO
-from gpt.gpt_description import generar_descripcion
+from gpt.gpt_description import generar_descripcion, hablar_texto
 
 # Inicializar MediaPipe y YOLO
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
 mp_draw = mp.solutions.drawing_utils
-model = YOLO('yolov10s.pt')
+model = YOLO('yolov10n.pt')
 
 # Cola para pasar el frame a OpenGL
 frame_queue = Queue(maxsize=1)
@@ -19,6 +19,11 @@ hand_position = [0.0, 0.0]
 finger_distance = 0.0
 detected_objects = []
 gesture_action = None
+
+contexto = {
+    "objetos_detectados": [],
+    "gestos_detectados": []
+}
 
 def detect_gestures_and_objects():
     global hand_position, finger_distance, detected_objects, gesture_action
@@ -59,11 +64,14 @@ def detect_gestures_and_objects():
                     dy = thumb_tip.y - index_tip.y
                     finger_distance = math.sqrt(dx ** 2 + dy ** 2)
 
-                    # Asignar una acción en función del gesto
+                     # Asignar una acción en función del gesto
                     if finger_distance < 0.05:
                         gesture_action = "Pinza"
                     else:
                         gesture_action = None
+
+                    if gesture_action and gesture_action not in contexto["gestos_detectados"]:
+                        contexto["gestos_detectados"].append(gesture_action)
 
             # Detección de objetos con YOLO
             yolo_results = model(frame, show=False)
@@ -78,11 +86,17 @@ def detect_gestures_and_objects():
                     detected_objects.append(label)
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
                     cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                    
+                    # Almacenar el objeto detectado en el diccionario
+                    if label not in contexto["objetos_detectados"]:
+                        contexto["objetos_detectados"].append(label)
 
-            # Generar narrativa de la escena basada en objetos y gestos
-            if detected_objects and gesture_action:
-                descripcion = generar_descripcion(detected_objects, gesture_action)
+            # Generar narrativa de la escena basada en objetos y gestos cada cierto tiempo
+            if contexto["objetos_detectados"] and contexto["gestos_detectados"]:
+                descripcion = generar_descripcion(contexto["objetos_detectados"], ", ".join(contexto["gestos_detectados"]))
                 print(descripcion)
+                hablar_texto(descripcion)  
+
 
             # Mandar el frame a OpenGL
             if not frame_queue.full():
@@ -91,9 +105,12 @@ def detect_gestures_and_objects():
                 frame_queue.get()
                 frame_queue.put(frame)
 
+            cv2.imshow('Detección de Objetos y Gestos', frame)    
+
             # Salir si se presiona la tecla 'q'
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+
     except Exception as e:
         print(f"Error al procesar la cámara: {e}")
     finally:
