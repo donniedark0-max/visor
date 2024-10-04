@@ -11,6 +11,6 @@ __pycache__/
 *.pt
 
 #ignora fotos
-**/.jpg
+assets/img/.jpg
 **/.jpeg
 **/.png
