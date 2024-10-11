@@ -2,6 +2,7 @@ import os
 import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 import google.generativeai as genai
+import random
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -18,16 +19,26 @@ speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azu
 speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural" 
 
 # Función para generar descripción con Gemini
-def generar_descripcion(objetos_detectados, gestos_detectados):
-    prompt = f"En la escena se detectaron los siguientes objetos: {', '.join(objetos_detectados)}. El usuario está realizando los gestos de {gestos_detectados}. Describe lo que está sucediendo pero texto pequeño."
-    
+def generar_descripcion(objetos_finales, gestos_detectados):
+    # Construcción de la descripción simple basada en la información disponible
+    print(f"GEMINI CAPTO :{objetos_finales}")
+    if objetos_finales and not gestos_detectados:
+        prompt = f"En la escena se captaron {', '.join(objetos_finales)}. Describe lo que está ocurriendo con esos objetos."
+    elif gestos_detectados and not objetos_finales:
+        prompt = f"Se captaron los gestos: {gestos_detectados}. Describe la acción que podría estar ocurriendo."
+    elif objetos_finales and gestos_detectados:
+        prompt = f"Se captaron {', '.join(objetos_finales)} y los gestos: {gestos_detectados}. Describe la escena y lo que podría estar pasando."
+    else:
+        prompt = "No se captaron objetos ni gestos."
+    print(f"Prompt enviado a Gemini: {prompt}")
     try:
+        # Generación de contenido con Gemini
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(
             prompt,
             generation_config=genai.types.GenerationConfig(
-                max_output_tokens=30,  
-                temperature=0.2,  
+                max_output_tokens=10,  
+                temperature=0.2  
             ),
         )
         return response.text

@@ -3,11 +3,12 @@ import mediapipe as mp
 import math
 from queue import Queue
 from ultralytics import YOLO
-import tkinter as tk
-from tkinter import Button, Label
 import time
 from collections import defaultdict
-import face_recognition
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QGridLayout
+from PyQt6.QtCore import Qt
+import sys
+#import face_recognition
 from gpt.gpt_description import generar_descripcion, hablar_texto
 
 # Inicializar MediaPipe y YOLO
@@ -16,12 +17,13 @@ hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7
 mp_draw = mp.solutions.drawing_utils
 
 # Modelos
-model1 = YOLO('yolov10n.pt')
-model2 = YOLO('/Users/dark0/Documents/Visor/assets/models/train13/weights/best.pt')
+model= YOLO('yolov10s.pt')
+#model2 = YOLO('/Users/dark0/Documents/Visor/assets/models/train13/weights/best.pt')
+#model3 = YOLO('/Users/dark0/Documents/Visor/assets/models/train3/weights/best.pt')
 
 
-juan_image = face_recognition.load_image_file("/Users/dark0/Documents/Visor/assets/img/juan.jpeg")
-juan_encoding = face_recognition.face_encodings(juan_image)[0]
+#juan_image = face_recognition.load_image_file("/Users/dark0/Documents/Visor/assets/img/juan.jpeg")
+#juan_encoding = face_recognition.face_encodings(juan_image)[0]
 
 # Cola para pasar el frame a OpenGL
 frame_queue = Queue(maxsize=1)
@@ -33,46 +35,37 @@ hand_position = [0.0, 0.0]
 finger_distance = 0.0
 detected_objects = []
 gesture_action = None
-
+object_threshold = 5
 # Variable para almacenar el contador de objetos detectados
-object_count = defaultdict(int)  # Almacena el conteo de cada objeto
+detected_object_counts = defaultdict(int)
 frame_window = 30  # Ventana de tiempo en cuadros
-current_frame = 0  # Llevar cuenta de los cuadros procesados
+total_frames = 0  # Variable para llevar el total de frames procesados
+confidence_threshold = 0.5  # Establece el umbral de confianza
 
 
 contexto = {
-    "objetos_detectados": [],
-    "gestos_detectados": []
+    "objetos_finales": [],
+    "gestos_detectados": set()
 }
 
-# Función para iniciar la detección
-def iniciar_deteccion():
-    global capturing
-    capturing = True
-    detect_gestures_and_objects()
-
-# Función para detener la detección
-def detener_deteccion():
-    global capturing
-    capturing = False
-
-# Función para pausar/reanudar
-def toggle_pause():
-    global paused
-    paused = not paused
-
-def reiniciar_programa():
-    # Reiniciar el diccionario de contexto y despausar el programa
-    global contexto
-    contexto = {
-        "objetos_detectados": [],
-        "gestos_detectados": []
-    }
-    toggle_pause()  # Despausar la captura de gestos y objetos para reiniciar
-
-def cerrar_programa():
-    root.quit() 
-
+# Función para filtrar objetos por confianza
+def filtrar_por_confianza(detected_object_counts, confidence_threshold=0.5):
+    """
+    Filtra los objetos detectados con una confianza mayor al umbral dado.
+    """
+    filtered_objects = defaultdict(int)
+    for obj, count in detected_object_counts.items():
+        parts = obj.rsplit(' ', 1)  # Dividir en el último espacio
+        if len(parts) == 2:
+            label, confidence = parts[0], parts[1]
+            try:
+                if float(confidence) >= confidence_threshold:
+                    filtered_objects[label] += count
+            except ValueError:
+                print(f"Error al procesar la confianza de {obj}")
+        else:
+            print(f"Etiqueta no válida: {obj}")
+    return filtered_objects
 
 # Función para verificar si los dedos están extendidos
 def dedos_extendidos(hand_landmarks):
@@ -110,12 +103,13 @@ def detectar_gesto_saludo(hand_landmarks):
 
     # Verificar si los dedos están extendidos (excepto el pulgar)
     if palma_orientada and dedos_extendidos(hand_landmarks):
+        contexto["gestos_detectados"].add("Saludo")
         return True  # Gesto de saludo detectado
     return False
 
 
 def detect_gestures_and_objects():
-    global hand_position, finger_distance, detected_objects, gesture_action
+    global hand_position, finger_distance, detected_objects, gesture_action, paused, capturing, total_frames
     cap = cv2.VideoCapture(1)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
@@ -131,14 +125,16 @@ def detect_gestures_and_objects():
             if not ret:
                 print("Error: No se pudo capturar el frame.")
                 break
-
+            
+            total_frames += 1
             # Detección de rostro
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            face_locations = face_recognition.face_locations(rgb_frame)
-            face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+            #rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            #face_locations = face_recognition.face_locations(rgb_frame)
+            #face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
-            juan_en_pantalla = False
+            #juan_en_pantalla = False
 
+            """"
             for face_encoding in face_encodings:
                 matches = face_recognition.compare_faces([juan_encoding], face_encoding)
 
@@ -150,19 +146,33 @@ def detect_gestures_and_objects():
 
             if not juan_en_pantalla:
                 print("Juan no está en pantalla.")
+            """
 
             if time.time() - start_time > 5:  # Limitar a 5 segundos de captura
                 print("Límite de tiempo alcanzado. Procesando datos...")
 
                  # Seleccionar el objeto detectado más frecuentemente
-                objeto_mas_frecuente = max(object_count, key=object_count.get)
-                contexto["objetos_detectados"] = [objeto_mas_frecuente]
+                min_frames_for_object = total_frames * 0.1
+                # Filtrar objetos por confianza
+                objetos_filtrados = filtrar_por_confianza(detected_object_counts, confidence_threshold=0.5)
 
-                descripcion = generar_descripcion(contexto["objetos_detectados"], ", ".join(contexto["gestos_detectados"]))
+                # Filtrar objetos que aparecieron en más del 10% de los frames
+                objetos_finales = [obj for obj, count in objetos_filtrados.items() if count >= min_frames_for_object]
+
+                
+                # Mostrar resultados
+                print(f"Total de fotogramas procesados: {total_frames}")
+                print(f"objetos filtrados: {objetos_filtrados}")
+                print(f"Conteo de objetos detectados: {dict(detected_object_counts)}")
+                print("Objetos detectados:", objetos_finales)
+                print("Gestos detectados:", set(contexto["gestos_detectados"]))
+ 
+                descripcion = generar_descripcion(objetos_finales, ", ".join(contexto["gestos_detectados"]))
                 print(descripcion)
-                hablar_texto(descripcion)
-
-                detener_deteccion()
+                #hablar_texto(descripcion)
+               
+                # Detener la detección para evitar más procesamiento
+                capturing = False
                 break
 
             # Detección de gestos
@@ -188,7 +198,7 @@ def detect_gestures_and_objects():
                     finger_distance = math.sqrt(dx ** 2 + dy ** 2)
 
                      # Asignar una acción en función del gesto
-                    if finger_distance < 0.02:
+                    if finger_distance < 0.002:
                         gesture_action = "Pinza"
                     else:
                         gesture_action = None
@@ -197,34 +207,35 @@ def detect_gestures_and_objects():
                     if detectar_gesto_saludo(hand_landmarks):
                         print("Saludo detectado")
                         # Puedes hacer algo aquí, como agregar el gesto al contexto
-                        contexto["gestos_detectados"].append("Saludo")
+                        contexto["gestos_detectados"].add("Saludo")
                 
 
                     if gesture_action and gesture_action not in contexto["gestos_detectados"]:
                         contexto["gestos_detectados"].append(gesture_action)
 
-           
 
-            for model in [model1, model2]:
-                # Detección de objetos con YOLO
-                yolo_results = model(frame, show=False)
-                for result in yolo_results:
-                    for obj in result.boxes:
-                        x1, y1, x2, y2 = map(int, obj.xyxy[0])
-                        class_id = int(obj.cls)
-                        confidence = obj.conf
-                        label = f'{model.names[class_id]} {float(confidence):.2f}'
-                        detected_objects.append(label)
+            yolo_results = model(frame, show=False)
+
+            for result in yolo_results:
+                for obj in result.boxes:
+                    x1, y1, x2, y2 = map(int, obj.xyxy[0])
+                    class_id = int(obj.cls)
+                    confidence = obj.conf
+                    label = f'{model.names[class_id]} {float(confidence):.2f}'
+                      # Evitar el uso de rsplit para evitar el error, simplemente maneja nombre y confianza por separado
+                    objeto_confianza = f'{model.names[class_id]} {float(confidence):.2f}'  
+
+                    if confidence >= confidence_threshold:
+                        detected_objects.append(objeto_confianza)
+                        print(f"Detected objects: {detected_objects}")
+                        detected_object_counts[objeto_confianza] += 1
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
                         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-                        
-                        object_count[label] += 1
-
+                       
             cv2.imshow('Detección de Objetos y Gestos', frame)    
 
             # Salir si se presiona la tecla 'q'
             if cv2.waitKey(1) & 0xFF == ord('q'):
-                detener_deteccion()
                 break
 
     except Exception as e:
@@ -233,21 +244,62 @@ def detect_gestures_and_objects():
         cap.release()
         cv2.destroyAllWindows()
 
-# Crear la interfaz gráfica con Tkinter
-root = tk.Tk()
-root.title("Control de Cámara")
+class FloatingMenu(QMainWindow):
+    def __init__(self):
+        super().__init__()
 
-# Botones
-btn_iniciar = Button(root, text="Iniciar Detección", command=iniciar_deteccion)
-btn_iniciar.pack(pady=10)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setGeometry(50, 50, 200, 200)
 
-# Botón para reiniciar el programa
-btn_reiniciar = Button(root, text="Reiniciar", command=reiniciar_programa)
-btn_reiniciar.pack(pady=10)
+        central_widget = QWidget()
+        layout = QVBoxLayout()
 
-# Botón para cerrar el programa
-btn_salir = Button(root, text="Salir", command=cerrar_programa)
-btn_salir.pack(pady=10)
+        # Botón para iniciar la detección
+        button_start = QPushButton("Iniciar Detección")
+        button_start.clicked.connect(self.iniciar_deteccion)
+        layout.addWidget(button_start)
 
-# Ejecutar la ventana de Tkinter
-root.mainloop()
+        # Botón para pausar/reanudar
+        button_pause = QPushButton("Pausar/Continuar")
+        button_pause.clicked.connect(self.toggle_pause)
+        layout.addWidget(button_pause)
+
+        # Botón para reiniciar el programa
+        button_restart = QPushButton("Reiniciar")
+        button_restart.clicked.connect(self.reiniciar_programa)
+        layout.addWidget(button_restart)
+
+        # Botón para salir de la aplicación
+        button_exit = QPushButton("Salir")
+        button_exit.clicked.connect(self.close_app)
+        layout.addWidget(button_exit)
+
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
+
+    def iniciar_deteccion(self):
+        global capturing
+        capturing = True
+        detect_gestures_and_objects()
+
+    def toggle_pause():
+        global paused
+        paused = not paused
+
+    def reiniciar_programa(self):
+        global contexto
+        contexto = {
+            "objetos_detectados": [],
+            "gestos_detectados": []
+        }
+    toggle_pause()
+
+    def close_app(self):
+        sys.exit()
+
+# Ejecutar la aplicación PyQt6
+app = QApplication(sys.argv)
+window = FloatingMenu()
+window.show()
+sys.exit(app.exec())
