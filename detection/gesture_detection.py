@@ -5,21 +5,25 @@ from queue import Queue
 from ultralytics import YOLO
 import time
 from collections import defaultdict
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QGridLayout
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QGridLayout, QInputDialog
 from PyQt6.QtCore import Qt
 import sys
+import torch
+from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 #import face_recognition
 from gpt.gpt_description import generar_descripcion, hablar_texto
 
 # Inicializar MediaPipe y YOLO
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mp_draw = mp.solutions.drawing_utils
 
 # Modelos
 model= YOLO('yolov10s.pt')
-#model2 = YOLO('/Users/dark0/Documents/Visor/assets/models/train13/weights/best.pt')
-#model3 = YOLO('/Users/dark0/Documents/Visor/assets/models/train3/weights/best.pt')
+#model = YOLO('/Users/dark0/Documents/Visor/assets/models/train13/weights/best.pt')
+#model = YOLO('/Users/dark0/Documents/Visor/assets/models/train3/weights/best.pt')
 
 
 #juan_image = face_recognition.load_image_file("/Users/dark0/Documents/Visor/assets/img/juan.jpeg")
@@ -45,9 +49,17 @@ confidence_threshold = 0.5  # Establece el umbral de confianza
 
 contexto = {
     "objetos_finales": [],
-    "gestos_detectados": set()
+    "gestos_detectados": set(),
 }
 
+
+def solicitar_ubicacion():
+    text, ok = QInputDialog.getText(None, 'Ubicación', 'Ingresa la ubicación actual:')
+    if ok and text:
+        return text
+    else:
+        return "Ubicación no especificada"
+    
 # Función para filtrar objetos por confianza
 def filtrar_por_confianza(detected_object_counts, confidence_threshold=0.5):
     """
@@ -106,7 +118,21 @@ def detectar_gesto_saludo(hand_landmarks):
         contexto["gestos_detectados"].add("Saludo")
         return True  # Gesto de saludo detectado
     return False
+"""
+def detect_pose(frame):
+    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    result = pose.process(img_rgb)
 
+    if result.pose_landmarks:
+        mp_draw.draw_landmarks(frame, result.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+        # Aquí puedes acceder a los landmarks
+        for id, lm in enumerate(result.pose_landmarks.landmark):
+            h, w, _ = frame.shape
+            cx, cy = int(lm.x * w), int(lm.y * h)
+            contexto["posturas_detectadas"].append(f"Landmark {id} en ({cx}, {cy})")
+
+    return frame
+"""
 
 def detect_gestures_and_objects():
     global hand_position, finger_distance, detected_objects, gesture_action, paused, capturing, total_frames
@@ -114,7 +140,6 @@ def detect_gestures_and_objects():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     start_time = time.time()
-
     if not cap.isOpened():
         print("Error: No se pudo abrir la cámara.")
         return
@@ -127,6 +152,8 @@ def detect_gestures_and_objects():
                 break
             
             total_frames += 1
+
+
             # Detección de rostro
             #rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             #face_locations = face_recognition.face_locations(rgb_frame)
@@ -167,7 +194,11 @@ def detect_gestures_and_objects():
                 print("Objetos detectados:", objetos_finales)
                 print("Gestos detectados:", set(contexto["gestos_detectados"]))
  
-                descripcion = generar_descripcion(objetos_finales, ", ".join(contexto["gestos_detectados"]))
+                descripcion = generar_descripcion(
+                    objetos_finales, 
+                    ", ".join(contexto["gestos_detectados"]),
+                    ubicacion,  # Ubicación solicitada
+                )
                 print(descripcion)
                 #hablar_texto(descripcion)
                
@@ -198,11 +229,12 @@ def detect_gestures_and_objects():
                     finger_distance = math.sqrt(dx ** 2 + dy ** 2)
 
                      # Asignar una acción en función del gesto
+                    """
                     if finger_distance < 0.002:
                         gesture_action = "Pinza"
                     else:
                         gesture_action = None
-
+                    """
                     # Detectar si el gesto de saludo está presente
                     if detectar_gesto_saludo(hand_landmarks):
                         print("Saludo detectado")
@@ -226,7 +258,7 @@ def detect_gestures_and_objects():
                     objeto_confianza = f'{model.names[class_id]} {float(confidence):.2f}'  
 
                     if confidence >= confidence_threshold:
-                        detected_objects.append(objeto_confianza)
+                        detected_objects.append(f"{model.names[class_id]}")
                         print(f"Detected objects: {detected_objects}")
                         detected_object_counts[objeto_confianza] += 1
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
@@ -279,7 +311,8 @@ class FloatingMenu(QMainWindow):
         self.setCentralWidget(central_widget)
 
     def iniciar_deteccion(self):
-        global capturing
+        global capturing, ubicacion
+        ubicacion = solicitar_ubicacion()
         capturing = True
         detect_gestures_and_objects()
 

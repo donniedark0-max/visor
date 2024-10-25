@@ -2,7 +2,7 @@ import os
 import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 import google.generativeai as genai
-import random
+import json
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -14,34 +14,100 @@ genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 azure_speech_key = os.getenv('AZURE_SPEECH_KEY')
 azure_region = os.getenv('AZURE_REGION')
 
-# Configuración de voz y servicio de Azure Speech
-speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
-speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural" 
+def configurar_azure_speech(formato_audio="HIGH_QUALITY"):
+    """
+    Configura Azure Speech con diferentes formatos de audio.
+    
+    Args:
+        formato_audio (str): Formato de audio deseado: 
+            - "HIGH_QUALITY": Máxima calidad (24KHz, 16Bit)
+            - "BALANCED": Balance entre calidad y rendimiento (16KHz, MP3)
+            - "COMPRESSED": Más comprimido, menor uso de datos (16KHz, MP3)
+    """
+
+    # Configuración de voz y servicio de Azure Speech
+    speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
+    speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural" 
+
+    AUDIO_FORMATS = {
+        # Máxima calidad - mejor para uso local
+        "HIGH_QUALITY": speechsdk.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm,
+        
+        # Calidad media - buen balance entre calidad y tamaño
+        "BALANCED": speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3,
+        
+        # Más comprimido - mejor para streaming o conexiones lentas
+        "COMPRESSED": speechsdk.SpeechSynthesisOutputFormat.Audio16Khz16KBitRateMonoMp3
+    }
+    
+    # Configurar el formato de audio seleccionado
+    audio_format = AUDIO_FORMATS.get(formato_audio, AUDIO_FORMATS["HIGH_QUALITY"])
+    speech_config.set_speech_synthesis_output_format(audio_format)
+    
+    return speech_config
 
 # Función para generar descripción con Gemini
-def generar_descripcion(objetos_finales, gestos_detectados):
+def generar_descripcion(objetos_finales, gestos_detectados, ubicacion):
     # Construcción de la descripción simple basada en la información disponible
-    print(f"GEMINI CAPTO :{objetos_finales}")
-    if objetos_finales and not gestos_detectados:
-        prompt = f"En la escena se captaron {', '.join(objetos_finales)}. Describe lo que está ocurriendo con esos objetos."
-    elif gestos_detectados and not objetos_finales:
-        prompt = f"Se captaron los gestos: {gestos_detectados}. Describe la acción que podría estar ocurriendo."
-    elif objetos_finales and gestos_detectados:
-        prompt = f"Se captaron {', '.join(objetos_finales)} y los gestos: {gestos_detectados}. Describe la escena y lo que podría estar pasando."
-    else:
-        prompt = "No se captaron objetos ni gestos."
-    print(f"Prompt enviado a Gemini: {prompt}")
+    print(f"GEMINI CAPTO:\n - Objetos: {objetos_finales}\n  - Gestos: {gestos_detectados}\n - Ubicación: {ubicacion}")
+     # Estructura de objetos en JSON
+
+    
+    # Crear el JSON con objetos, gestos y ubicación
+    prompt = {
+        "scene": {
+            "objects": objetos_finales, 
+            "gestures": list(gestos_detectados) if gestos_detectados else [],
+            "location": ubicacion
+        },
+        "instructions": {
+            "role": "Eres un asistente especializado en describir escenas para personas ciegas, actuando como sus ojos. Debes crear descripciones naturales y fluidas que ayuden a visualizar la escena en tiempo real.",
+            "style_guidelines": [
+                "Usa lenguaje natural y conversacional",
+                "Describe las posibles interacciones entre objetos y personas",
+                "Menciona la disposición espacial de los elementos",
+                "Incluye detalles relevantes que ayuden a construir una imagen mental sin especular demasiado",
+                "Evita frases como 'veo a', 'hay', 'se encuentra' o 'está presente'",
+                "Prioriza verbos de acción y descripciones dinámicas",
+                "Prioriza descripciones útiles para una persona ciega",
+
+            ],
+            "examples": {
+                "good": [
+                    "Una persona sostiene una botella en la cocina, aparentemente sirviendo alguna bebida.",
+                    "Dos personas están sentadas en el sofá de la sala, cada una con un libro en sus manos, muy concentradas en su lectura."
+                ],
+                "bad": [
+                    "Se ha detectado una persona y una botella en la escena.",
+                    "Hay dos personas y dos libros presentes en la ubicación."
+                ]
+            }
+        },
+        "output_format": {
+            "style": "Genera una descripción fluida y natural en español, usando 1-2 oraciones conectadas lógicamente.",
+            "tone": "Amigable y descriptivo, como si estuvieras contándole a un amigo lo que ves.",
+            "length": "Conciso pero informativo"
+
+        }
+    }
+    # Convertir a JSON
+    prompt_json = json.dumps(prompt)
+    print(f"JSON Prompt enviado a Gemini: {prompt_json}")
+    
     try:
         # Generación de contenido con Gemini
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-1.5-flash-002")
         response = model.generate_content(
-            prompt,
+            prompt_json,
             generation_config=genai.types.GenerationConfig(
-                max_output_tokens=10,  
-                temperature=0.2  
+                max_output_tokens=60,  # Aumenta el número de tokens si deseas una descripción más detallada
+                temperature=0.5  # Ajusta la temperatura para controlar la creatividad
             ),
         )
-        return response.text
+        descripcion = response.text
+        descripcion = descripcion.replace("Se ha detectado", "").replace("Está presente", "")
+        return descripcion
+
     except Exception as e:
         print(f"Error al obtener texto de Gemini: {str(e)}")
         return None
@@ -49,6 +115,8 @@ def generar_descripcion(objetos_finales, gestos_detectados):
 
 # Función para convertir texto a voz usando Azure y reproducirlo en tiempo real
 def hablar_texto(texto):
+    
+    speech_config = configurar_azure_speech("HIGH_QUALITY")
     speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config)
     result = speech_synthesizer.speak_text_async(texto).get()
 
