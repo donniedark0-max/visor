@@ -50,6 +50,9 @@ confidence_threshold = 0.5  # Establece el umbral de confianza
 contexto = {
     "objetos_finales": [],
     "gestos_detectados": set(),
+    
+    
+
 }
 
 
@@ -136,7 +139,7 @@ def detect_pose(frame):
 
 def detect_gestures_and_objects():
     global hand_position, finger_distance, detected_objects, gesture_action, paused, capturing, total_frames
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     start_time = time.time()

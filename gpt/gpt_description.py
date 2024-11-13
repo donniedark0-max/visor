@@ -14,17 +14,10 @@ genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 azure_speech_key = os.getenv('AZURE_SPEECH_KEY')
 azure_region = os.getenv('AZURE_REGION')
 
-def configurar_azure_speech(formato_audio="HIGH_QUALITY"):
-    """
-    Configura Azure Speech con diferentes formatos de audio.
-    
-    Args:
-        formato_audio (str): Formato de audio deseado: 
-            - "HIGH_QUALITY": Máxima calidad (24KHz, 16Bit)
-            - "BALANCED": Balance entre calidad y rendimiento (16KHz, MP3)
-            - "COMPRESSED": Más comprimido, menor uso de datos (16KHz, MP3)
-    """
+speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
+speech_config.speech_synthesis_voice_name = "es-MX-JorgeNeural" 
 
+<<<<<<< HEAD
     # Configuración de voz y servicio de Azure Speech
     speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
     speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural" 
@@ -43,6 +36,8 @@ def configurar_azure_speech(formato_audio="HIGH_QUALITY"):
     speech_config.set_speech_synthesis_output_format(audio_format)
     
     return speech_config
+=======
+>>>>>>> 91ddb9da344142e6ef7addc36e0cf0891325469d
 
 # Función para generar descripción con Gemini
 def generar_descripcion(objetos_finales, gestos_detectados, ubicacion):
@@ -98,7 +93,7 @@ def generar_descripcion(objetos_finales, gestos_detectados, ubicacion):
         response = model.generate_content(
             prompt_json,
             generation_config=genai.types.GenerationConfig(
-                max_output_tokens=60,  # Aumenta el número de tokens si deseas una descripción más detallada
+                max_output_tokens=100,  # Aumenta el número de tokens si deseas una descripción más detallada
                 temperature=0.5  # Ajusta la temperatura para controlar la creatividad
             ),
         )
@@ -113,8 +108,6 @@ def generar_descripcion(objetos_finales, gestos_detectados, ubicacion):
 
 # Función para convertir texto a voz usando Azure y reproducirlo en tiempo real
 def hablar_texto(texto):
-    
-    speech_config = configurar_azure_speech("HIGH_QUALITY")
     speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config)
     result = speech_synthesizer.speak_text_async(texto).get()
 
@@ -126,3 +119,6 @@ def hablar_texto(texto):
         print(f"Síntesis cancelada: {cancellation_details.reason}")
         if cancellation_details.reason == speechsdk.CancellationReason.Error:
             print(f"Detalles del error: {cancellation_details.error_details}")
+
+    
+    
