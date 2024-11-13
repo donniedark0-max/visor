@@ -35,9 +35,7 @@ def configurar_azure_speech(formato_audio="HIGH_QUALITY"):
         
         # Calidad media - buen balance entre calidad y tamaño
         "BALANCED": speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3,
-        
-        # Más comprimido - mejor para streaming o conexiones lentas
-        "COMPRESSED": speechsdk.SpeechSynthesisOutputFormat.Audio16Khz16KBitRateMonoMp3
+       
     }
     
     # Configurar el formato de audio seleccionado

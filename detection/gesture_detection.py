@@ -200,7 +200,7 @@ def detect_gestures_and_objects():
                     ubicacion,  # Ubicación solicitada
                 )
                 print(descripcion)
-                #hablar_texto(descripcion)
+                hablar_texto(descripcion)
                
                 # Detener la detección para evitar más procesamiento
                 capturing = False
