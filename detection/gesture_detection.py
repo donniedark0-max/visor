@@ -12,6 +12,9 @@ import torch
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 #import face_recognition
 from gpt.gpt_description import generar_descripcion, hablar_texto
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Cambia la ruta según tu instalación
+
 
 # Inicializar MediaPipe y YOLO
 mp_hands = mp.solutions.hands
@@ -153,7 +156,7 @@ def detectar_x_brazos(pose_landmarks):
 
 def detect_gestures_and_objects():
     global hand_position, finger_distance, detected_objects, gesture_action, paused, capturing, total_frames
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     start_time = time.time()
@@ -167,9 +170,21 @@ def detect_gestures_and_objects():
             if not ret:
                 print("Error: No se pudo capturar el frame.")
                 break
+                
+                
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+             # Aplicar OCR al frame actual
+            texto_detectado = pytesseract.image_to_string(gray, lang="spa")  # Usa 'spa' para español
+            print("Texto detectado:", texto_detectado)  # Muestra el texto detectado
+
+            # Mostrar el frame y el texto detectado en la ventana
+            cv2.putText(frame, texto_detectado, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.imshow('Detección de Objetos y OCR', frame)
+
             
             total_frames += 1
-
+            
 
             if time.time() - start_time > 5:  # Limitar a 5 segundos de captura
                 print("Límite de tiempo alcanzado. Procesando datos...")
