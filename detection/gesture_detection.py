@@ -22,15 +22,6 @@ mp_draw = mp.solutions.drawing_utils
 
 # Modelos
 model= YOLO('yolov10s.pt')
-#model = YOLO('/Users/dark0/Documents/Visor/assets/models/train13/weights/best.pt')
-#model = YOLO('/Users/dark0/Documents/Visor/assets/models/train3/weights/best.pt')
-
-
-#juan_image = face_recognition.load_image_file("/Users/dark0/Documents/Visor/assets/img/juan.jpeg")
-#juan_encoding = face_recognition.face_encodings(juan_image)[0]
-
-# Cola para pasar el frame a OpenGL
-frame_queue = Queue(maxsize=1)
 
 # Variables globales
 paused = False
@@ -50,11 +41,8 @@ confidence_threshold = 0.5  # Establece el umbral de confianza
 contexto = {
     "objetos_finales": [],
     "gestos_detectados": set(),
-    
-    
-
+    "poses_detectadas": set()
 }
-
 
 def solicitar_ubicacion():
     text, ok = QInputDialog.getText(None, 'Ubicación', 'Ingresa la ubicación actual:')
@@ -95,7 +83,6 @@ def dedos_extendidos(hand_landmarks):
         mp_hands.HandLandmark.RING_FINGER_TIP,
         mp_hands.HandLandmark.PINKY_TIP
     ]
-
     # Verificar si cada dedo está más arriba que el nudillo correspondiente
     for landmark in dedos_landmarks:
         if hand_landmarks.landmark[landmark].y > hand_landmarks.landmark[landmark - 2].y:
@@ -121,25 +108,52 @@ def detectar_gesto_saludo(hand_landmarks):
         contexto["gestos_detectados"].add("Saludo")
         return True  # Gesto de saludo detectado
     return False
-"""
-def detect_pose(frame):
-    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    result = pose.process(img_rgb)
 
-    if result.pose_landmarks:
-        mp_draw.draw_landmarks(frame, result.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-        # Aquí puedes acceder a los landmarks
-        for id, lm in enumerate(result.pose_landmarks.landmark):
-            h, w, _ = frame.shape
-            cx, cy = int(lm.x * w), int(lm.y * h)
-            contexto["posturas_detectadas"].append(f"Landmark {id} en ({cx}, {cy})")
+def detectar_parado(pose_landmarks):
+    knee_left = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_KNEE]
+    knee_right = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_KNEE]
+    hip_left = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_HIP]
+    hip_right = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_HIP]
+    if (knee_left.visibility > 0.5 and knee_right.visibility > 0.5 and
+        knee_left.y > hip_left.y and knee_right.y > hip_right.y):
+        return "De pie"
+    return "Sentado"
 
-    return frame
-"""
+def detectar_manos_levantadas(pose_landmarks):
+    left_wrist = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_WRIST]
+    right_wrist = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
+    left_shoulder = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_SHOULDER]
+    right_shoulder = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_SHOULDER]
+
+    if (left_wrist.y < left_shoulder.y and right_wrist.y < right_shoulder.y):
+        return "Manos levantadas"
+    return None
+
+def detectar_manos_cruzadas(pose_landmarks):
+    left_wrist = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_WRIST]
+    right_wrist = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
+    left_elbow = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_ELBOW]
+    right_elbow = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_ELBOW]
+
+    if (abs(left_wrist.x - right_wrist.x) < 0.05 and
+        left_wrist.y < left_elbow.y and right_wrist.y < right_elbow.y):
+        return "Manos cruzadas"
+    return None
+
+def detectar_x_brazos(pose_landmarks):
+    left_wrist = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_WRIST]
+    right_wrist = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
+    left_shoulder = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_SHOULDER]
+    right_shoulder = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_SHOULDER]
+
+    if (left_wrist.x < right_shoulder.x and right_wrist.x > left_shoulder.x and
+        left_wrist.y < left_shoulder.y and right_wrist.y < right_shoulder.y):
+        return "X con los brazos"
+    return None
 
 def detect_gestures_and_objects():
     global hand_position, finger_distance, detected_objects, gesture_action, paused, capturing, total_frames
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     start_time = time.time()
@@ -156,27 +170,6 @@ def detect_gestures_and_objects():
             
             total_frames += 1
 
-
-            # Detección de rostro
-            #rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            #face_locations = face_recognition.face_locations(rgb_frame)
-            #face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
-
-            #juan_en_pantalla = False
-
-            """"
-            for face_encoding in face_encodings:
-                matches = face_recognition.compare_faces([juan_encoding], face_encoding)
-
-                if True in matches:
-                    juan_en_pantalla = True
-                    if "Juan" not in contexto["objetos_detectados"]:
-                        contexto["objetos_detectados"].append("Juan está en pantalla")
-                        print("Juan está en pantalla")
-
-            if not juan_en_pantalla:
-                print("Juan no está en pantalla.")
-            """
 
             if time.time() - start_time > 5:  # Limitar a 5 segundos de captura
                 print("Límite de tiempo alcanzado. Procesando datos...")
@@ -200,7 +193,8 @@ def detect_gestures_and_objects():
                 descripcion = generar_descripcion(
                     objetos_finales, 
                     ", ".join(contexto["gestos_detectados"]),
-                    ubicacion,  # Ubicación solicitada
+                    ", ".join(contexto["poses_detectadas"]),                    
+                    ubicacion,
                 )
                 print(descripcion)
                 hablar_texto(descripcion)
@@ -212,6 +206,7 @@ def detect_gestures_and_objects():
             # Detección de gestos
             img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             result_hands = hands.process(img_rgb)
+            result_pose = pose.process(img_rgb)
 
             if result_hands.multi_hand_landmarks:
                 for hand_landmarks in result_hands.multi_hand_landmarks:
@@ -231,23 +226,27 @@ def detect_gestures_and_objects():
                     dy = thumb_tip.y - index_tip.y
                     finger_distance = math.sqrt(dx ** 2 + dy ** 2)
 
-                     # Asignar una acción en función del gesto
-                    """
-                    if finger_distance < 0.002:
-                        gesture_action = "Pinza"
-                    else:
-                        gesture_action = None
-                    """
                     # Detectar si el gesto de saludo está presente
                     if detectar_gesto_saludo(hand_landmarks):
                         print("Saludo detectado")
                         # Puedes hacer algo aquí, como agregar el gesto al contexto
                         contexto["gestos_detectados"].add("Saludo")
-                
-
                     if gesture_action and gesture_action not in contexto["gestos_detectados"]:
                         contexto["gestos_detectados"].append(gesture_action)
 
+            if result_pose.pose_landmarks:
+                mp_draw.draw_landmarks(frame, result_pose.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+                pose_manos_levantadas = detectar_manos_levantadas(result_pose.pose_landmarks)
+                if pose_manos_levantadas:
+                    contexto["poses_detectadas"].add(pose_manos_levantadas)
+                pose_manos_cruzadas = detectar_manos_cruzadas(result_pose.pose_landmarks)
+                if pose_manos_cruzadas:
+                    contexto["poses_detectadas"].add(pose_manos_cruzadas)
+                pose_x_brazos = detectar_x_brazos(result_pose.pose_landmarks)
+                if pose_x_brazos:
+                    contexto["poses_detectadas"].add(pose_x_brazos)
+                pose_parado_sentado = detectar_parado(result_pose.pose_landmarks)
+                contexto["poses_detectadas"].add(pose_parado_sentado)
 
             yolo_results = model(frame, show=False)
 
@@ -278,6 +277,7 @@ def detect_gestures_and_objects():
     finally:
         cap.release()
         cv2.destroyAllWindows()
+
 
 class FloatingMenu(QMainWindow):
     def __init__(self):
@@ -327,7 +327,8 @@ class FloatingMenu(QMainWindow):
         global contexto
         contexto = {
             "objetos_detectados": [],
-            "gestos_detectados": []
+            "gestos_detectados": [],
+            "poses_detectadas": []
         }
     toggle_pause()
 

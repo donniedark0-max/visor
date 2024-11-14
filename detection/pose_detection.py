@@ -1,6 +1,7 @@
 import cv2
 import mediapipe as mp
 from collections import defaultdict
+import json
 
 # Inicializar MediaPipe Pose
 mp_pose = mp.solutions.pose
@@ -56,7 +57,7 @@ def detectar_parado(pose_landmarks):
     return "Sentado"
 
 def detectar_poses_y_almacenar():
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     if not cap.isOpened():
         print("Error: No se pudo abrir la cámara.")
         return
@@ -101,8 +102,15 @@ def detectar_poses_y_almacenar():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
+        # Guardar las poses detectadas en un archivo JSON al finalizar la detección
+        with open("poses_detectadas.json", "w") as file:
+            json.dump({"poses_detectadas": list(contexto_poses["poses_detectadas"])}, file, ensure_ascii=False, indent=4)
+
     except Exception as e:
         print(f"Error durante la detección de poses: {e}")
     finally:
         cap.release()
         cv2.destroyAllWindows()
+
+# Llamada a la función para iniciar la detección
+detectar_poses_y_almacenar()
