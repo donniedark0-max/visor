@@ -17,7 +17,7 @@ azure_region = os.getenv('AZURE_REGION')
 
 speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
 speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural"
-
+ 
 
 # Función para generar descripción con Gemini
 def generar_descripcion(objetos_finales, gestos_detectados, poses_detectadas, ubicacion):

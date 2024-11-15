@@ -2,8 +2,7 @@ import cv2
 import pytesseract
 import azure.cognitiveservices.speech as speechsdk
 
-pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract.exe'
-
+pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 # Asegúrate de configurar la ruta de Tesseract en caso de que sea necesario.
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
@@ -39,7 +38,7 @@ def detectar_texto_en_frame(frame):
 
 # Función principal para iniciar la cámara y esperar la captura
 def iniciar_captura_con_ocr():
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
