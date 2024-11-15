@@ -6,9 +6,10 @@ import time
 import numpy as np
 import mediapipe as mp
 import math
+import random  # Importar el módulo random para respuestas aleatorias
 from collections import defaultdict
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QInputDialog, QLabel
-from PyQt6.QtCore import Qt, pyqtSignal, QObject, QThread
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QThread, pyqtSlot
 from PyQt6.QtGui import QImage, QPixmap
 from ultralytics import YOLO
 from gpt.gpt_description import generar_descripcion, hablar_texto
@@ -52,7 +53,6 @@ contexto = {
     "gestos_detectados": set(),
     "poses_detectadas": set()
 }
-
 
 # Función para filtrar objetos por confianza
 def filtrar_por_confianza(detected_object_counts, confidence_threshold=0.5):
@@ -153,6 +153,62 @@ def detectar_x_brazos(pose_landmarks):
         return "X con los brazos"
     return None
 
+# Funciones para respuestas aleatorias
+def respuesta_no_entendida():
+    respuestas = [
+        "Lo siento, no he entendido. ¿Podrías repetir, por favor?",
+        "Disculpa, no capté eso. ¿Puedes decirlo de nuevo?",
+        "Hmm, no estoy segura de lo que quieres decir. ¿Me lo repites?",
+        "No entendí el comando. ¿Podrías repetirlo?",
+        "Perdón, no te he entendido bien. ¿Puedes repetir?"
+    ]
+    texto = random.choice(respuestas)
+    hablar_texto(texto)
+
+def preguntar_mas_ayuda():
+    respuestas = [
+        "¿Puedo ayudarte en algo más?",
+        "¿Necesitas algo más?",
+        "¿Hay algo más en lo que pueda asistirte?",
+        "¿Te ayudo con algo más?",
+        "¿Hay algo más que pueda hacer por ti?"
+    ]
+    texto = random.choice(respuestas)
+    hablar_texto(texto)
+
+def saludo_inicial():
+    saludos = [
+        "Hola, ¿en qué puedo ayudarte?",
+        "¡Hola! ¿Cómo puedo asistirte hoy?",
+        "¡Buenas! Dime, ¿cómo puedo ayudarte?",
+        "Hola, estoy aquí para ayudarte. ¿Qué necesitas?",
+        "¡Hola! Estoy lista para ayudarte. ¿En qué te puedo asistir?"
+    ]
+    texto = random.choice(saludos)
+    hablar_texto(texto)
+
+def respuesta_afirmativa():
+    respuestas = [
+        "Perfecto, ¿qué deseas que haga?",
+        "Claro, dime en qué puedo ayudarte.",
+        "Por supuesto, ¿cómo puedo asistirte?",
+        "¡Excelente! ¿Qué necesitas?",
+        "Muy bien, estoy escuchando. ¿En qué te puedo ayudar?"
+    ]
+    texto = random.choice(respuestas)
+    hablar_texto(texto)
+
+def respuesta_negativa():
+    despedidas = [
+        "De acuerdo, si necesitas algo más, solo dime 'Hola, Elara'.",
+        "Entiendo, estaré aquí si me necesitas. ¡Hasta luego!",
+        "Muy bien, que tengas un buen día. Estoy aquí si necesitas ayuda.",
+        "Está bien, no dudes en llamarme si me necesitas. ¡Hasta pronto!",
+        "Claro, me avisas si puedo ayudarte en algo más. ¡Cuídate!"
+    ]
+    texto = random.choice(despedidas)
+    hablar_texto(texto)
+
 # Función para hablar texto usando Azure
 def hablar_texto(texto):
     audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
@@ -171,7 +227,6 @@ def hablar_texto(texto):
 
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
-    command_signal = pyqtSignal(str)
     command_finished_signal = pyqtSignal(str)
 
     def __init__(self):
@@ -183,7 +238,8 @@ class VideoThread(QThread):
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         self.location = None  # Inicializar la ubicación en None
         self.command_thread = None  # Hilo para ejecutar comandos
-
+        self.current_command_name = None  # Añadido
+        
     def run(self):
         while self._run_flag:
             ret, frame = self.cap.read()
@@ -193,19 +249,24 @@ class VideoThread(QThread):
 
                 # Verificar si se ha recibido algún comando y no hay un comando en ejecución
                 if self.command_detected and (self.command_thread is None or not self.command_thread.isRunning()):
+                    print(f"VideoThread: Comando detectado '{self.command_detected}'")
                     if self.command_detected == "lee_texto":
+                        print("VideoThread: Iniciando OCRWorker")
                         self.command_thread = QThread()
-                        worker = OCRWorker(frame)
+                        worker = OCRWorker(frame.copy())
                         worker.moveToThread(self.command_thread)
                         self.command_thread.started.connect(worker.run)
                         worker.finished.connect(self.command_thread.quit)
                         worker.finished.connect(worker.deleteLater)
                         self.command_thread.finished.connect(self.command_thread.deleteLater)
+                        # Guardar el nombre del comando
+                        self.current_command_name = "lee_texto"
                         # Conectar la señal de finalización del worker
-                        worker.finished.connect(partial(self.command_finished, "lee_texto"))
+                        worker.finished.connect(self.command_finished)
                         self.command_thread.start()
                         self.command_detected = None
                     elif self.command_detected == "describe_escena":
+                        print("VideoThread: Iniciando DescriptionWorker")
                         self.command_thread = QThread()
                         worker = DescriptionWorker()
                         worker.moveToThread(self.command_thread)
@@ -213,23 +274,28 @@ class VideoThread(QThread):
                         worker.finished.connect(self.command_thread.quit)
                         worker.finished.connect(worker.deleteLater)
                         self.command_thread.finished.connect(self.command_thread.deleteLater)
+                        # Guardar el nombre del comando
+                        self.current_command_name = "describe_escena"
                         # Conectar la señal de finalización del worker
-                        worker.finished.connect(partial(self.command_finished, "describe_escena"))
+                        worker.finished.connect(self.command_finished)
                         self.command_thread.start()
                         self.command_detected = None
+            else:
+                print("Error al leer el frame de la cámara.")
 
-        # Liberar la cámara al finalizar
-        self.cap.release()
-
-    def command_finished(self, command_name):
-        print(f"VideoThread: Command '{command_name}' finished.")
-        self.command_finished_signal.emit(command_name)
+    def command_finished(self):
+        print(f"VideoThread: Command '{self.current_command_name}' finished.")
+        self.command_finished_signal.emit(self.current_command_name)
+        self.current_command_name = None
+        self.command_thread = None
+        
     def stop(self):
         self._run_flag = False
         self.wait()
 
-    # Agregar este método a la clase VideoThread
-    def set_command(self, command):
+    @pyqtSlot(str)
+    def receive_command(self, command):
+        print(f"VideoThread: Comando recibido '{command}'")
         self.command_detected = command
 
 class OCRWorker(QObject):
@@ -240,8 +306,13 @@ class OCRWorker(QObject):
         self.frame = frame
 
     def run(self):
-        perform_ocr_and_read(self.frame)
-        self.finished.emit()
+        try:
+            print("OCRWorker: Iniciando perform_ocr_and_read")
+            perform_ocr_and_read(self.frame)
+        except Exception as e:
+            print(f"OCRWorker: Exception occurred: {e}")
+        finally:
+            self.finished.emit()
 
 class DescriptionWorker(QObject):
     finished = pyqtSignal()
@@ -250,11 +321,18 @@ class DescriptionWorker(QObject):
         super().__init__()
 
     def run(self):
-        # Obtener ubicación por voz
-        location = self.get_location_by_voice()
-        # Ejecutar perform_detection_and_description con la ubicación
-        perform_detection_and_description(location)
-        self.finished.emit()
+        try:
+            print("DescriptionWorker: Iniciando perform_detection_and_description")
+            # Obtener ubicación por voz
+            location = self.get_location_by_voice()
+            print(f"DescriptionWorker: Ubicación obtenida: '{location}'")
+            # Ejecutar perform_detection_and_description con la ubicación
+            perform_detection_and_description(location)
+        except Exception as e:
+            print(f"DescriptionWorker: Exception occurred: {e}")
+        finally:
+            print("DescriptionWorker: Finished run method")
+            self.finished.emit()
 
     def get_location_by_voice(self):
         # Decir "Dime la ubicación" usando síntesis de voz
@@ -265,7 +343,7 @@ class DescriptionWorker(QObject):
         speech_config_recognition.speech_recognition_language = "es-ES"
         # Ajustar los tiempos de espera si es necesario
         speech_config_recognition.set_property(speechsdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, '10000')  # 10 segundos
-        speech_config_recognition.set_property(speechsdk.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, '2000')  # 2 segundos
+        speech_config_recognition.set_property(speechsdk.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, '1000')  # 2 segundos
 
         # Crear el reconocedor de voz
         audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
@@ -303,7 +381,8 @@ class CommandListenerThread(QThread):
         self.speech_config_recognition.speech_recognition_language = "es-ES"
 
     def run(self):
-       while self._run_flag:
+        while self._run_flag:
+            print(f"Estado actual: {self.state}")
             if self.state == "waiting_wake_word":
                 self.wait_for_wake_word()
             elif self.state == "waiting_command":
@@ -327,14 +406,14 @@ class CommandListenerThread(QThread):
         print(f"Texto reconocido: '{result.text}'")
 
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            recognized_text = result.text.lower()
-            if recognized_text.strip() == "":
+            recognized_text = result.text.lower().strip()
+            if recognized_text == "":
                 print("No se reconoció ninguna voz o el texto está vacío.")
             else:
                 print(f"Texto reconocido: {recognized_text}")
-                if "hola elara" in recognized_text or "hola, helara" in recognized_text or "hola lara" in recognized_text  or "hola helara" in recognized_text or "hola, elara" in recognized_text:
+                if any(frase in recognized_text for frase in ["hola aitana", "hola, aitana", "hola aitana", "hola, aitana"]):
                     print("Wake word detectado. Activando escucha de comandos.")
-                    hablar_texto("Hola, en qué puedo ayudarte?")
+                    saludo_inicial()
                     self.state = "waiting_command"
         elif result.reason == speechsdk.ResultReason.NoMatch:
             print("No se pudo reconocer ninguna voz")
@@ -355,21 +434,22 @@ class CommandListenerThread(QThread):
         print(f"Texto reconocido: '{result.text}'")
 
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            recognized_text = result.text.lower()
-            if recognized_text.strip() == "":
-                print("No se reconoció ninguna voz o el texto está vacío.")
-            else:
+            recognized_text = result.text.lower().strip()
+            if recognized_text:
                 self.text_signal.emit(recognized_text)  # Emitir el texto reconocido
                 if "lee lo de la cámara" in recognized_text or "lee lo de la camara" in recognized_text:
+                    print("Comando reconocido: 'lee_texto'")
                     self.command_signal.emit("lee_texto")
                     self.state = "command_executing"
-                elif ("descríbeme la escena" in recognized_text or "describeme la escena" in recognized_text or
-                    "dime la escena" in recognized_text or "escribe la escena" in recognized_text or
-                    "ponme la escena" in recognized_text or "llévame la escena" in recognized_text):
+                elif any(frase in recognized_text for frase in ["descríbeme la escena", "describeme la escena", "dime la escena", "describe la escena", "detalla la escena"]):
+                    print("Comando reconocido: 'describe_escena'")
                     self.command_signal.emit("describe_escena")
                     self.state = "command_executing"
                 else:
-                    hablar_texto("No he entendido el comando. ¿Puedes repetirlo?")
+                    respuesta_no_entendida()
+            else:
+                print("No se reconoció ninguna voz o el texto está vacío.")
+                respuesta_no_entendida()
         elif result.reason == speechsdk.ResultReason.NoMatch:
             print("No se pudo reconocer ninguna voz")
             hablar_texto("No he escuchado nada. ¿Puedes repetirlo?")
@@ -380,10 +460,9 @@ class CommandListenerThread(QThread):
                 print(f"Detalles del error: {cancellation_details.error_details}")
         else:
             print(f"Resultado desconocido: {result.reason}")
-        
 
     def ask_more_help(self):
-        hablar_texto("¿Te puedo ayudar en algo más?")
+        preguntar_mas_ayuda()
         self.state = "waiting_response"
 
     def listen_for_response(self):
@@ -395,16 +474,16 @@ class CommandListenerThread(QThread):
 
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
             recognized_text = result.text.lower()
-            if "sí" in recognized_text or "si" in recognized_text:
+            if any(palabra in recognized_text for palabra in ["sí", "si"]):
                 print("El usuario desea más ayuda.")
-                hablar_texto("¿Qué deseas que haga?")
+                respuesta_afirmativa()
                 self.state = "waiting_command"
             elif "no" in recognized_text:
                 print("El usuario no desea más ayuda.")
-                hablar_texto("De acuerdo. Si necesitas algo más, dime 'Hola, Elara'.")
+                respuesta_negativa()
                 self.state = "waiting_wake_word"
             else:
-                hablar_texto("No he entendido tu respuesta. Por favor, di 'sí' o 'no'.")
+                respuesta_no_entendida()
         elif result.reason == speechsdk.ResultReason.NoMatch:
             print("No se pudo reconocer ninguna voz")
             hablar_texto("No he escuchado nada. Por favor, di 'sí' o 'no'.")
@@ -425,20 +504,22 @@ class CommandListenerThread(QThread):
 
         result = speech_recognizer.recognize_once_async().get()
         return result
-    
-    def on_command_finished(self, command_name):
-        print(f"Comando '{command_name}' ha finalizado.")
-        self.state = "asking_more_help"
 
+    def on_command_finished(self, command_name):
+        print(f"CommandListenerThread: Comando '{command_name}' ha finalizado.")
+        self.state = "asking_more_help"
+        
     def stop(self):
         self._run_flag = False
         self.wait()
 
 # Función para realizar OCR y leer el texto detectado
 def perform_ocr_and_read(frame):
+    print("perform_ocr_and_read: Iniciando OCR")
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     texto_detectado = pytesseract.image_to_string(gray, lang="spa")  # Usa 'spa' para español
     texto_detectado = texto_detectado.strip()
+    print(f"Texto detectado: '{texto_detectado}'")
     if texto_detectado:
         texto_a_leer = f"Se detectó el siguiente texto: {texto_detectado}"
         print(texto_a_leer)
@@ -483,9 +564,6 @@ def perform_detection_and_description(ubicacion):
 
                 if confidence >= confidence_threshold:
                     detected_object_counts[objeto_confianza] += 1
-                    # Opcional: dibujar bounding boxes
-                    # cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                    # cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
         # Detección de gestos y poses
         img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -494,13 +572,11 @@ def perform_detection_and_description(ubicacion):
 
         if result_hands.multi_hand_landmarks:
             for hand_landmarks in result_hands.multi_hand_landmarks:
-                # mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
                 if detectar_gesto_saludo(hand_landmarks):
                     print("Saludo detectado")
                     contexto["gestos_detectados"].add("Saludo")
 
         if result_pose.pose_landmarks:
-            # mp_draw.draw_landmarks(frame, result_pose.pose_landmarks, mp_pose.POSE_CONNECTIONS)
             pose_manos_levantadas = detectar_manos_levantadas(result_pose.pose_landmarks)
             if pose_manos_levantadas:
                 contexto["poses_detectadas"].add(pose_manos_levantadas)
@@ -513,13 +589,7 @@ def perform_detection_and_description(ubicacion):
             pose_parado_sentado = detectar_parado(result_pose.pose_landmarks)
             contexto["poses_detectadas"].add(pose_parado_sentado)
 
-        # Mostrar el frame (opcional)
-        # cv2.imshow('Detección de Objetos y Gestos', frame)
-        # if cv2.waitKey(1) & 0xFF == ord('q'):
-        #     break
-
     cap.release()
-    # cv2.destroyAllWindows()
 
     # Procesar y generar la descripción
     min_frames_for_object = total_frames * 0.1
@@ -541,7 +611,6 @@ def perform_detection_and_description(ubicacion):
     )
     print(descripcion)
     hablar_texto(descripcion)
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -573,12 +642,12 @@ class MainWindow(QMainWindow):
 
         # Inicializar el hilo de comandos
         self.command_thread = CommandListenerThread()
-        self.command_thread.command_signal.connect(self.handle_command)
+        self.command_thread.command_signal.connect(self.thread.receive_command)
         self.command_thread.text_signal.connect(self.update_recognized_text)
+        self.thread.command_finished_signal.connect(self.command_thread.on_command_finished)
         self.command_thread.start()
 
-        self.thread.command_finished_signal.connect(self.command_thread.on_command_finished)
-       
+
         # Botón para salir de la aplicación
         self.button_exit = QPushButton("Salir", self)
         self.button_exit.clicked.connect(self.close_app)
@@ -603,9 +672,6 @@ class MainWindow(QMainWindow):
         qt_image = qt_image.scaled(800, 600, Qt.AspectRatioMode.KeepAspectRatio)
         return QPixmap.fromImage(qt_image)
 
-    def handle_command(self, command):
-        self.thread.set_command(command)
-
     def update_recognized_text(self, text):
         """ Actualizar la etiqueta con el texto reconocido """
         self.text_label.setText(f"Texto reconocido: {text}")
@@ -613,11 +679,12 @@ class MainWindow(QMainWindow):
     def close_app(self):
         self.close()
 
-
-
 class GestureDetectionApp(QApplication):
     def __init__(self, sys_argv):
         super().__init__(sys_argv)
         self.main_window = MainWindow()
         self.main_window.show()
 
+if __name__ == '__main__':
+    app = GestureDetectionApp(sys.argv)
+    sys.exit(app.exec())
