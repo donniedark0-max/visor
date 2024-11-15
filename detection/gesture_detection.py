@@ -45,7 +45,6 @@ capturing = True
 command_detected = None
 texto_detectado = ""
 ubicacion = ""
-
 confidence_threshold = 0.5  # Umbral de confianza
 
 contexto = {
@@ -233,9 +232,18 @@ class VideoThread(QThread):
         super().__init__()
         self._run_flag = True
         self.command_detected = None
-        self.cap = cv2.VideoCapture(1)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        #self.cap = cv2.VideoCapture(1)
+        video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
+        self.cap = cv2.VideoCapture(video_path)
+        ####
+        # Obtener la tasa de fotogramas (FPS) del video
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        print(f"FPS del video: {self.fps}")
+
+        self.frame_delay = 1 / self.fps if self.fps > 0 else 0.066
+        ###
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
         self.location = None  # Inicializar la ubicación en None
         self.command_thread = None  # Hilo para ejecutar comandos
         self.current_command_name = None  # Añadido
@@ -280,6 +288,8 @@ class VideoThread(QThread):
                         worker.finished.connect(self.command_finished)
                         self.command_thread.start()
                         self.command_detected = None
+                time.sleep(self.frame_delay)
+        
             else:
                 print("Error al leer el frame de la cámara.")
 
@@ -288,7 +298,7 @@ class VideoThread(QThread):
         self.command_finished_signal.emit(self.current_command_name)
         self.current_command_name = None
         self.command_thread = None
-        
+
     def stop(self):
         self._run_flag = False
         self.wait()
@@ -536,13 +546,17 @@ def perform_detection_and_description(ubicacion):
         "gestos_detectados": set(),
         "poses_detectadas": set()
     }
-    cap = cv2.VideoCapture(1)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    #cap = cv2.VideoCapture(1)
+    video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
+    cap = cv2.VideoCapture(video_path)
+
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     total_frames = 0
     start_time = time.time()
     detected_object_counts = defaultdict(int)
+    objects_per_frame = []  # Lista para almacenar conteos de objetos por fotograma
 
     while time.time() - start_time < 5:  # Capturar durante 5 segundos
         ret, frame = cap.read()
@@ -551,6 +565,8 @@ def perform_detection_and_description(ubicacion):
             break
 
         total_frames += 1
+
+        frame_objects_counts = defaultdict(int)
 
         # Procesar detección de objetos
         yolo_results = model(frame, show=False)
@@ -564,6 +580,9 @@ def perform_detection_and_description(ubicacion):
 
                 if confidence >= confidence_threshold:
                     detected_object_counts[objeto_confianza] += 1
+                    frame_objects_counts[model.names[class_id]] += 1
+
+        objects_per_frame.append(frame_objects_counts)
 
         # Detección de gestos y poses
         img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -591,10 +610,27 @@ def perform_detection_and_description(ubicacion):
 
     cap.release()
 
-    # Procesar y generar la descripción
+    # Mantener tu filtrado existente
     min_frames_for_object = total_frames * 0.1
     objetos_filtrados = filtrar_por_confianza(detected_object_counts, confidence_threshold=0.5)
-    objetos_finales = [obj for obj, count in objetos_filtrados.items() if count >= min_frames_for_object]
+    objetos_filtrados = {obj: count for obj, count in objetos_filtrados.items() if count >= min_frames_for_object}
+
+    # Ahora, calcular el promedio de objetos detectados solo para los objetos filtrados
+    average_object_counts = {}
+    for obj_label in objetos_filtrados.keys():
+        # Obtenemos el nombre del objeto sin la confianza
+        obj_name = obj_label
+        counts = [frame_counts.get(obj_name, 0) for frame_counts in objects_per_frame]
+        if counts:
+            average_count = sum(counts) / len(counts)
+            average_object_counts[obj_name] = average_count
+
+    # Preparar objetos_finales con los promedios y nombres en inglés
+    objetos_finales = []
+    for obj_label, avg_count in average_object_counts.items():
+        avg_count_rounded = int(round(avg_count))
+        if avg_count_rounded > 0:
+            objetos_finales.append(f"{avg_count_rounded} {obj_label}")
 
     # Mostrar resultados
     print(f"Total de fotogramas procesados: {total_frames}")
