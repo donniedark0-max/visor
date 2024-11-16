@@ -1,0 +1,13 @@
+PyQt6
+opencv-python
+numpy
+mediapipe
+ultralytics
+pytesseract
+azure-cognitiveservices-speech
+python-dotenv
+pymongo
+certifi
+google-generativeai
+word2number
+requests
