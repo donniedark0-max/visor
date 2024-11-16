@@ -18,6 +18,7 @@ import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 from functools import partial
 import requests
+from detection.mongodb import guardar_deteccion, guardar_log
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -83,7 +84,8 @@ class BarcelonaWorker(QObject):
     def run(self):
         try:
             import requests
-            # Reemplaza 'TU_API_KEY' con tu clave de API de deportes
+            from detection.mongodb import guardar_partido, guardar_log
+
             api_key = barcelona_api
             team_id = 81  # ID del FC Barcelona en la API
             base_url = 'https://api.football-data.org/v4/teams/'
@@ -109,14 +111,31 @@ class BarcelonaWorker(QObject):
                 else:
                     texto = f"El próximo partido del Barcelona es contra {home_team} el {match_date_str}."
 
+                # Crear un diccionario con la información del partido
+                partido_info = {
+                    "equipo_local": home_team,
+                    "equipo_visitante": away_team,
+                    "fecha_partido": match_date_str,
+                    "descripcion": texto
+                }
+
+                guardar_log("info", f"Partido guardado: {texto}")
+
+
+                # Guardar en la base de datos
+                guardar_partido(partido_info)
                 print(texto)
                 hablar_texto(texto)
             else:
                 texto = "No se encontró información sobre el próximo partido del Barcelona."
+                guardar_log("warning", texto)
+
                 print(texto)
                 hablar_texto(texto)
         except Exception as e:
-            print(f"BarcelonaWorker: Exception occurred: {e}")
+            error_msg = f"BarcelonaWorker: Exception occurred: {e}"
+            guardar_log("error", error_msg)
+            print(error_msg)
         finally:
             self.finished.emit()
 
@@ -643,113 +662,130 @@ def perform_ocr_and_read(frame):
 
 # Función para realizar detección de objetos y generar descripción
 def perform_detection_and_description(ubicacion):
-    global contexto
-    contexto = {
-        "objetos_finales": [],
-        "gestos_detectados": set(),
-        "poses_detectadas": set()
-    }
-    #cap = cv2.VideoCapture(1)
-    video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
-    cap = cv2.VideoCapture(video_path)
+    try:
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        global contexto
+        contexto = {
+            "objetos_finales": [],
+            "gestos_detectados": set(),
+            "poses_detectadas": set()
+        }
+        #cap = cv2.VideoCapture(1)
+        video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
+        cap = cv2.VideoCapture(video_path)
 
-    total_frames = 0
-    start_time = time.time()
-    detected_object_counts = defaultdict(int)
-    objects_per_frame = []  # Lista para almacenar conteos de objetos por fotograma
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
-    while time.time() - start_time < 5:  # Capturar durante 5 segundos
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: No se pudo capturar el frame.")
-            break
+        total_frames = 0
+        start_time = time.time()
+        detected_object_counts = defaultdict(int)
+        objects_per_frame = []  # Lista para almacenar conteos de objetos por fotograma
 
-        total_frames += 1
+        while time.time() - start_time < 5:  # Capturar durante 5 segundos
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: No se pudo capturar el frame.")
+                break
 
-        frame_objects_counts = defaultdict(int)
+            total_frames += 1
 
-        # Procesar detección de objetos
-        yolo_results = model(frame, show=False)
-        for result in yolo_results:
-            for obj in result.boxes:
-                x1, y1, x2, y2 = map(int, obj.xyxy[0])
-                class_id = int(obj.cls)
-                confidence = obj.conf
-                label = f'{model.names[class_id]} {float(confidence):.2f}'
-                objeto_confianza = f'{model.names[class_id]} {float(confidence):.2f}'
+            frame_objects_counts = defaultdict(int)
 
-                if confidence >= confidence_threshold:
-                    detected_object_counts[objeto_confianza] += 1
-                    frame_objects_counts[model.names[class_id]] += 1
+            # Procesar detección de objetos
+            yolo_results = model(frame, show=False)
+            for result in yolo_results:
+                for obj in result.boxes:
+                    x1, y1, x2, y2 = map(int, obj.xyxy[0])
+                    class_id = int(obj.cls)
+                    confidence = obj.conf
+                    label = f'{model.names[class_id]} {float(confidence):.2f}'
+                    objeto_confianza = f'{model.names[class_id]} {float(confidence):.2f}'
 
-        objects_per_frame.append(frame_objects_counts)
+                    if confidence >= confidence_threshold:
+                        detected_object_counts[objeto_confianza] += 1
+                        frame_objects_counts[model.names[class_id]] += 1
 
-        # Detección de gestos y poses
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result_hands = hands.process(img_rgb)
-        result_pose = pose.process(img_rgb)
+            objects_per_frame.append(frame_objects_counts)
 
-        if result_hands.multi_hand_landmarks:
-            for hand_landmarks in result_hands.multi_hand_landmarks:
-                if detectar_gesto_saludo(hand_landmarks):
-                    print("Saludo detectado")
-                    contexto["gestos_detectados"].add("Saludo")
+            # Detección de gestos y poses
+            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result_hands = hands.process(img_rgb)
+            result_pose = pose.process(img_rgb)
 
-        if result_pose.pose_landmarks:
-            pose_manos_levantadas = detectar_manos_levantadas(result_pose.pose_landmarks)
-            if pose_manos_levantadas:
-                contexto["poses_detectadas"].add(pose_manos_levantadas)
-            pose_manos_cruzadas = detectar_manos_cruzadas(result_pose.pose_landmarks)
-            if pose_manos_cruzadas:
-                contexto["poses_detectadas"].add(pose_manos_cruzadas)
-            pose_x_brazos = detectar_x_brazos(result_pose.pose_landmarks)
-            if pose_x_brazos:
-                contexto["poses_detectadas"].add(pose_x_brazos)
-            pose_parado_sentado = detectar_parado(result_pose.pose_landmarks)
-            contexto["poses_detectadas"].add(pose_parado_sentado)
+            if result_hands.multi_hand_landmarks:
+                for hand_landmarks in result_hands.multi_hand_landmarks:
+                    if detectar_gesto_saludo(hand_landmarks):
+                        print("Saludo detectado")
+                        contexto["gestos_detectados"].add("Saludo")
 
-    cap.release()
+            if result_pose.pose_landmarks:
+                pose_manos_levantadas = detectar_manos_levantadas(result_pose.pose_landmarks)
+                if pose_manos_levantadas:
+                    contexto["poses_detectadas"].add(pose_manos_levantadas)
+                pose_manos_cruzadas = detectar_manos_cruzadas(result_pose.pose_landmarks)
+                if pose_manos_cruzadas:
+                    contexto["poses_detectadas"].add(pose_manos_cruzadas)
+                pose_x_brazos = detectar_x_brazos(result_pose.pose_landmarks)
+                if pose_x_brazos:
+                    contexto["poses_detectadas"].add(pose_x_brazos)
+                pose_parado_sentado = detectar_parado(result_pose.pose_landmarks)
+                contexto["poses_detectadas"].add(pose_parado_sentado)
 
-    # Mantener tu filtrado existente
-    min_frames_for_object = total_frames * 0.1
-    objetos_filtrados = filtrar_por_confianza(detected_object_counts, confidence_threshold=0.5)
-    objetos_filtrados = {obj: count for obj, count in objetos_filtrados.items() if count >= min_frames_for_object}
+        cap.release()
+        
+        # Mantener tu filtrado existente
+        min_frames_for_object = total_frames * 0.1
+        objetos_filtrados = filtrar_por_confianza(detected_object_counts, confidence_threshold=0.5)
+        objetos_filtrados = {obj: count for obj, count in objetos_filtrados.items() if count >= min_frames_for_object}
 
-    # Ahora, calcular el promedio de objetos detectados solo para los objetos filtrados
-    average_object_counts = {}
-    for obj_label in objetos_filtrados.keys():
-        # Obtenemos el nombre del objeto sin la confianza
-        obj_name = obj_label
-        counts = [frame_counts.get(obj_name, 0) for frame_counts in objects_per_frame]
-        if counts:
-            average_count = sum(counts) / len(counts)
-            average_object_counts[obj_name] = average_count
+        # Ahora, calcular el promedio de objetos detectados solo para los objetos filtrados
+        average_object_counts = {}
+        for obj_label in objetos_filtrados.keys():
+            # Obtenemos el nombre del objeto sin la confianza
+            obj_name = obj_label
+            counts = [frame_counts.get(obj_name, 0) for frame_counts in objects_per_frame]
+            if counts:
+                average_count = sum(counts) / len(counts)
+                average_object_counts[obj_name] = average_count
 
-    # Preparar objetos_finales con los promedios y nombres en inglés
-    objetos_finales = []
-    for obj_label, avg_count in average_object_counts.items():
-        avg_count_rounded = int(round(avg_count))
-        if avg_count_rounded > 0:
-            objetos_finales.append(f"{avg_count_rounded} {obj_label}")
+        # Preparar objetos_finales con los promedios y nombres en inglés
+        objetos_finales = []
+        for obj_label, avg_count in average_object_counts.items():
+            avg_count_rounded = int(round(avg_count))
+            if avg_count_rounded > 0:
+                objetos_finales.append(f"{avg_count_rounded} {obj_label}")
 
-    # Mostrar resultados
-    print(f"Total de fotogramas procesados: {total_frames}")
-    print(f"Objetos filtrados: {objetos_filtrados}")
-    print(f"Conteo de objetos detectados: {dict(detected_object_counts)}")
-    print("Objetos detectados:", objetos_finales)
-    print("Gestos detectados:", set(contexto["gestos_detectados"]))
+        # Mostrar resultados
+        print(f"Total de fotogramas procesados: {total_frames}")
+        print(f"Objetos filtrados: {objetos_filtrados}")
+        print(f"Conteo de objetos detectados: {dict(detected_object_counts)}")
+        print("Objetos detectados:", objetos_finales)
+        print("Gestos detectados:", set(contexto["gestos_detectados"]))
 
-    descripcion = generar_descripcion(
-        objetos_finales,
-        ", ".join(contexto["gestos_detectados"]),
-        ", ".join(contexto["poses_detectadas"]),
-        ubicacion
-    )
-    print(descripcion)
-    hablar_texto(descripcion)
+        descripcion = generar_descripcion(
+            objetos_finales,
+            ", ".join(contexto["gestos_detectados"]),
+            ", ".join(contexto["poses_detectadas"]),
+            ubicacion
+        )
+
+        guardar_deteccion(
+            objetos_detectados=list(detected_object_counts.keys()),
+            gestos_detectados=contexto['gestos_detectados'],
+            poses_detectadas=contexto['poses_detectadas'],
+            ubicacion=ubicacion,
+            descripcion=descripcion
+        )
+        print("Detección guardada correctamente.")
+
+        guardar_log("info", "Detección y guardado completados")
+
+
+        print(descripcion)
+        hablar_texto(descripcion)
+    except Exception as e:
+        guardar_log("error", f"Error en la detección: {e}")
 
 class MainWindow(QMainWindow):
     def __init__(self):
