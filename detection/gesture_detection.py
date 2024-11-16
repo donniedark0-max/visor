@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from functools import partial
 import requests
 from detection.mongodb import guardar_deteccion, guardar_log
+from word2number import w2n
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -55,6 +56,129 @@ contexto = {
     "gestos_detectados": set(),
     "poses_detectadas": set()
 }
+
+def convertir_texto_a_equipo(text):
+    """
+    Convierte un texto en español al nombre de un equipo válido.
+    """
+    equipos_validos = {
+        "barcelona": "FC Barcelona",
+        "real madrid": "Real Madrid",
+        "atletico de madrid": "Atlético de Madrid",
+        "manchester united": "Manchester United",
+        "liverpool": "Liverpool",
+        "chelsea": "Chelsea",
+        "juventus": "Juventus",
+        "milan": "AC Milan",
+        "boca juniors": "Boca Juniors",
+        "river plate": "River Plate",
+        "psg": "Paris Saint-Germain"
+    }
+
+    # Convertir a minúsculas y eliminar espacios extra
+    text = text.lower().strip()
+
+    # Buscar el nombre del equipo en el diccionario
+    return equipos_validos.get(text, text)  # Si no está en el diccionario, devolver el texto original
+
+def ask_for_favorite_team():
+    while True:
+        hablar_texto("Por favor, dime cuál es tu equipo favorito.")
+        speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
+        result = speech_recognizer.recognize_once_async().get()
+
+        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            recognized_text = result.text.strip().lower()
+            print(f"Texto reconocido: {recognized_text}")
+
+            # Intentar convertir el texto reconocido al nombre del equipo
+            team = convertir_texto_a_equipo(recognized_text)
+            print(f"Equipo reconocido: {team}")
+
+            # Confirmar antes de guardar
+            if confirm_input("equipo favorito", team):
+                return team
+        elif result.reason == speechsdk.ResultReason.NoMatch:
+            print("No se pudo reconocer ninguna voz")
+            hablar_texto("No he escuchado nada. Por favor, intenta nuevamente.")
+        elif result.reason == speechsdk.ResultReason.Canceled:
+            cancellation_details = result.cancellation_details
+            print(f"Reconocimiento cancelado: {cancellation_details.reason}")
+            if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                print(f"Detalles del error: {cancellation_details.error_details}")
+        else:
+            print(f"Resultado desconocido: {result.reason}")
+
+def ask_for_input(prompt_text):
+    hablar_texto(prompt_text)
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
+    result = speech_recognizer.recognize_once_async().get()
+    
+    if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+        recognized_text = result.text.strip()
+        print(f"Texto reconocido: {recognized_text}")
+        return recognized_text
+    elif result.reason == speechsdk.ResultReason.NoMatch:
+        print("No se pudo reconocer ninguna voz")
+        hablar_texto("No he escuchado nada. Por favor, intenta nuevamente.")
+        return None
+    elif result.reason == speechsdk.ResultReason.Canceled:
+        cancellation_details = result.cancellation_details
+        print(f"Reconocimiento cancelado: {cancellation_details.reason}")
+        if cancellation_details.reason == speechsdk.CancellationReason.Error:
+            print(f"Detalles del error: {cancellation_details.error_details}")
+        return None
+    else:
+        print(f"Resultado desconocido: {result.reason}")
+        return None
+
+def confirm_input(info_type, info_value):
+    hablar_texto(f"Tu {info_type} es {info_value}, ¿correcto?")
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
+    result = speech_recognizer.recognize_once_async().get()
+    
+    if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+        recognized_text = result.text.lower().strip()
+        print(f"Confirmación reconocida: {recognized_text}")
+        if any(palabra in recognized_text for palabra in ["sí", "si", "correcto", "así es", "see"]):
+            return True
+        else:
+            return False
+    else:
+        print("No se pudo obtener la confirmación.")
+        hablar_texto("No he escuchado tu confirmación. Por favor, intentemos de nuevo.")
+        return False
+
+def capture_photo(name):
+    hablar_texto("Voy a tomar una foto para tu perfil.")
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: No se pudo abrir la cámara.")
+        hablar_texto("Lo siento, no pude acceder a la cámara.")
+        return None
+    ret, frame = cap.read()
+    cap.release()
+    if ret:
+        image_path = f"assets/img/{name}.jpg"
+        os.makedirs(os.path.dirname(image_path), exist_ok=True)
+        cv2.imwrite(image_path, frame)
+        hablar_texto("Foto tomada correctamente.")
+        return image_path
+    else:
+        print("Error: No se pudo capturar la imagen.")
+        hablar_texto("Lo siento, no pude tomar la foto.")
+        return None
+        
+def saludo_inicial(user_name):
+    saludos = [
+        f"Hola {user_name}, ¿en qué puedo ayudarte?",
+        f"¡Hola {user_name}! ¿Cómo puedo asistirte hoy?",
+        f"¡Buenas {user_name}! Dime, ¿cómo puedo ayudarte?",
+        f"Hola {user_name}, estoy aquí para ayudarte. ¿Qué necesitas?",
+        f"¡Hola {user_name}! Estoy lista para ayudarte. ¿En qué te puedo asistir?"
+    ]
+    texto = random.choice(saludos)
+    hablar_texto(texto)
 
 class TimeWorker(QObject):
     finished = pyqtSignal()
@@ -262,35 +386,35 @@ def preguntar_mas_ayuda():
     texto = random.choice(respuestas)
     hablar_texto(texto)
 
-def saludo_inicial():
+def saludo_inicial(user_name):
     saludos = [
-        "Hola, ¿en qué puedo ayudarte?",
-        "¡Hola! ¿Cómo puedo asistirte hoy?",
+        f"Hola,{user_name} ¿en qué puedo ayudarte?",
+        f"¡Hola! {user_name} ¿Cómo puedo asistirte hoy?",
         "¡Buenas! Dime, ¿cómo puedo ayudarte?",
-        "Hola, estoy aquí para ayudarte. ¿Qué necesitas?",
+        f"Hola, {user_name} estoy aquí para ayudarte. ¿Qué necesitas?",
         "¡Hola! Estoy lista para ayudarte. ¿En qué te puedo asistir?"
     ]
     texto = random.choice(saludos)
     hablar_texto(texto)
 
-def respuesta_afirmativa():
+def respuesta_afirmativa(user_name):
     respuestas = [
-        "Perfecto, ¿qué deseas que haga?",
-        "Claro, dime en qué puedo ayudarte.",
-        "Por supuesto, ¿cómo puedo asistirte?",
-        "¡Excelente! ¿Qué necesitas?",
-        "Muy bien, estoy escuchando. ¿En qué te puedo ayudar?"
+        f"Perfecto, {user_name}. ¿Qué deseas que haga?",
+        f"Claro, {user_name}, dime en qué puedo ayudarte.",
+        f"Por supuesto, {user_name}, ¿cómo puedo asistirte?",
+        f"¡Excelente, {user_name}! ¿Qué necesitas?",
+        f"Muy bien, {user_name}, estoy escuchando. ¿En qué te puedo ayudar?"
     ]
     texto = random.choice(respuestas)
     hablar_texto(texto)
 
-def respuesta_negativa():
+def respuesta_negativa(user_name):
     despedidas = [
         "De acuerdo, si necesitas algo más, solo dime 'Hola, Elara'.",
-        "Entiendo, estaré aquí si me necesitas. ¡Hasta luego!",
-        "Muy bien, que tengas un buen día. Estoy aquí si necesitas ayuda.",
+        f"Entiendo, estaré aquí si me necesitas. ¡Hasta luego {user_name}!",
+        f"Muy bien, que tengas un buen día {user_name}. Estoy aquí si necesitas ayuda.",
         "Está bien, no dudes en llamarme si me necesitas. ¡Hasta pronto!",
-        "Claro, me avisas si puedo ayudarte en algo más. ¡Cuídate!"
+        f"Claro, me avisas si puedo ayudarte en algo más. ¡Cuídate {user_name}!"
     ]
     texto = random.choice(despedidas)
     hablar_texto(texto)
@@ -319,16 +443,19 @@ class VideoThread(QThread):
         super().__init__()
         self._run_flag = True
         self.command_detected = None
-        #self.cap = cv2.VideoCapture(1)
-        video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
-        self.cap = cv2.VideoCapture(video_path)
-        ####
-        # Obtener la tasa de fotogramas (FPS) del video
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-        print(f"FPS del video: {self.fps}")
+        self.cap = cv2.VideoCapture(1)
 
-        self.frame_delay = 1 / self.fps if self.fps > 0 else 0.066
-        ###
+        ###############################################################################################################
+        #video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
+        #self.cap = cv2.VideoCapture(video_path)
+
+        # Obtener la tasa de fotogramas (FPS) del video
+        #self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        #print(f"FPS del video: {self.fps}")
+
+        #self.frame_delay = 1 / self.fps if self.fps > 0 else 0.066
+        ###############################################################################################################
+
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
         self.location = None  # Inicializar la ubicación en None
@@ -402,7 +529,7 @@ class VideoThread(QThread):
                         self.command_thread.start()
                         self.command_detected = None
                 #BORRAR SI SE USCA CV(1)        
-                time.sleep(self.frame_delay)
+                #time.sleep(self.frame_delay)
         
             else:
                 print("Error al leer el frame de la cámara.")
@@ -497,8 +624,10 @@ class CommandListenerThread(QThread):
     command_signal = pyqtSignal(str)
     text_signal = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, user_name):
         super().__init__()
+        self.user_name = user_name  # Almacenar el nombre del usuario
+        
         self._run_flag = True
         self.state = "waiting_wake_word"  # Estados: waiting_wake_word, waiting_command, asking_more_help, waiting_response
         self.speech_config_recognition = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
@@ -537,7 +666,7 @@ class CommandListenerThread(QThread):
                 print(f"Texto reconocido: {recognized_text}")
                 if any(frase in recognized_text for frase in ["hola aitana", "hola, aitana", "hola aitana", "hola, aitana"]):
                     print("Wake word detectado. Activando escucha de comandos.")
-                    saludo_inicial()
+                    saludo_inicial(self.user_name)
                     self.state = "waiting_command"
         elif result.reason == speechsdk.ResultReason.NoMatch:
             print("No se pudo reconocer ninguna voz")
@@ -608,11 +737,11 @@ class CommandListenerThread(QThread):
             recognized_text = result.text.lower()
             if any(palabra in recognized_text for palabra in ["sí", "si"]):
                 print("El usuario desea más ayuda.")
-                respuesta_afirmativa()
+                respuesta_afirmativa(self.user_name)
                 self.state = "waiting_command"
             elif "no" in recognized_text:
                 print("El usuario no desea más ayuda.")
-                respuesta_negativa()
+                respuesta_negativa(self.user_name)
                 self.state = "waiting_wake_word"
             else:
                 respuesta_no_entendida()
@@ -670,9 +799,12 @@ def perform_detection_and_description(ubicacion):
             "gestos_detectados": set(),
             "poses_detectadas": set()
         }
-        #cap = cv2.VideoCapture(1)
-        video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
-        cap = cv2.VideoCapture(video_path)
+        cap = cv2.VideoCapture(1)
+
+        ###############################################################################################################
+        #video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
+        #cap = cv2.VideoCapture(video_path)
+        ###############################################################################################################
 
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
@@ -790,6 +922,54 @@ def perform_detection_and_description(ubicacion):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        
+        # Importar las funciones de mongodb.py
+        from detection.mongodb import check_user_data, save_user_data, get_user_data
+
+        # Variable para almacenar el nombre del usuario
+        self.user_name = ""
+        self.favorite_team = ""
+
+        if not check_user_data():
+            # Solicitar el nombre por voz
+            while True:
+                name = ask_for_input("Por favor, dime tu nombre.")
+                if name:
+                    if confirm_input("nombre", name):
+                        break
+                    else:
+                        hablar_texto("Entiendo. Intentemos de nuevo.")
+                else:
+                    hablar_texto("No he podido entender tu nombre. Por favor, intentemos de nuevo.")
+
+            # Solicitar el equipo favorito por voz
+            while True:
+                favorite_team = ask_for_input("Ahora dime cuál es tu equipo favorito.")
+                if favorite_team:
+                    if confirm_input("equipo favorito", favorite_team):
+                        break
+                    else:
+                        hablar_texto("Entendido. Intentemos de nuevo.")
+                else:
+                    hablar_texto("No he podido entender tu equipo favorito. Por favor, intentemos de nuevo.")
+
+
+            # Tomar la foto
+            image_path = capture_photo(name)
+            if image_path:
+                # Guardar los datos en la base de datos
+                save_user_data(name, favorite_team, image_path)
+                self.user_name = name
+                self.favorite_team = favorite_team
+            else:
+                print("Error al capturar la foto. Saliendo de la aplicación.")
+                sys.exit(1)
+        else:
+            # Obtener los datos del usuario y saludarlo
+            user_data = get_user_data()
+            self.user_name = user_data['nombre']
+            self.favorite_team = user_data['equipo_favorito']
+            hablar_texto(f"Hola, {self.user_name}. Tu equipo favorito es {self.favorite_team}.")
 
         self.setWindowTitle("Detección de Gestos y Objetos")
         self.setGeometry(100, 100, 800, 600)
@@ -816,7 +996,7 @@ class MainWindow(QMainWindow):
         self.thread.start()
 
         # Inicializar el hilo de comandos
-        self.command_thread = CommandListenerThread()
+        self.command_thread = CommandListenerThread(self.user_name)
         self.command_thread.command_signal.connect(self.thread.receive_command)
         self.command_thread.text_signal.connect(self.update_recognized_text)
         self.thread.command_finished_signal.connect(self.command_thread.on_command_finished)

@@ -18,8 +18,31 @@ db = client['visor_database']
 partidos_collection = db['partidos']
 detecciones_collection = db['detecciones']
 logs_collection = db['logs']
+usuarios_collection = db['usuarios']
 
 print("Conectado a MongoDB correctamente.")
+
+def check_user_data():
+    """Verifica si existen datos del usuario en la base de datos."""
+    user = usuarios_collection.find_one()
+    return user is not None
+
+def save_user_data(name, favorite_team, image_path):
+    """Guarda los datos del usuario en la base de datos."""
+    user_data = {
+        'nombre': name,
+        "equipo_favorito": favorite_team,
+        'imagen': image_path,
+        "timestamp": time.time()
+
+    }
+    result = usuarios_collection.insert_one(user_data)
+    print(f"Usuario guardado con ID: {result.inserted_id}")
+
+def get_user_data():
+    """Obtiene los datos del usuario desde la base de datos."""
+    user = usuarios_collection.find_one()
+    return user
 
 def guardar_partido(partido):
     partido['timestamp'] = time.time()
