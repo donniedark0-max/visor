@@ -17,6 +17,7 @@ import pytesseract
 import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 from functools import partial
+import requests
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -24,6 +25,7 @@ load_dotenv()
 # Configuración de la API de Azure Speech
 azure_speech_key = os.getenv('AZURE_SPEECH_KEY')
 azure_region = os.getenv('AZURE_REGION')
+barcelona_api =os.getenv('BARCA_KEY')
 
 speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
 speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural"
@@ -52,6 +54,72 @@ contexto = {
     "gestos_detectados": set(),
     "poses_detectadas": set()
 }
+
+class TimeWorker(QObject):
+    finished = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self):
+        try:
+            from datetime import datetime
+            now = datetime.now()
+            current_time = now.strftime("%H:%M")
+            texto = f"La hora actual es {current_time}."
+            print(texto)
+            hablar_texto(texto)
+        except Exception as e:
+            print(f"TimeWorker: Exception occurred: {e}")
+        finally:
+            self.finished.emit()
+
+class BarcelonaWorker(QObject):
+    finished = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self):
+        try:
+            import requests
+            # Reemplaza 'TU_API_KEY' con tu clave de API de deportes
+            api_key = barcelona_api
+            team_id = 81  # ID del FC Barcelona en la API
+            base_url = 'https://api.football-data.org/v4/teams/'
+            headers = {'X-Auth-Token': api_key}
+
+            response = requests.get(f"{base_url}{team_id}/matches?status=SCHEDULED", headers=headers)
+            data = response.json()
+
+            if 'matches' in data and len(data['matches']) > 0:
+                next_match = data['matches'][0]
+                home_team = next_match['homeTeam']['name']
+                away_team = next_match['awayTeam']['name']
+                match_date = next_match['utcDate']
+                
+                # Convertir la fecha a un formato más legible
+                from datetime import datetime
+                match_datetime = datetime.strptime(match_date, "%Y-%m-%dT%H:%M:%SZ")
+                match_date_str = match_datetime.strftime("%d de %B, %Y a las %H:%M")
+                
+                # Determinar si el Barcelona es el equipo local o visitante
+                if next_match['homeTeam']['id'] == team_id:
+                    texto = f"El próximo partido del Barcelona es contra {away_team} el {match_date_str}."
+                else:
+                    texto = f"El próximo partido del Barcelona es contra {home_team} el {match_date_str}."
+
+                print(texto)
+                hablar_texto(texto)
+            else:
+                texto = "No se encontró información sobre el próximo partido del Barcelona."
+                print(texto)
+                hablar_texto(texto)
+        except Exception as e:
+            print(f"BarcelonaWorker: Exception occurred: {e}")
+        finally:
+            self.finished.emit()
+
 
 # Función para filtrar objetos por confianza
 def filtrar_por_confianza(detected_object_counts, confidence_threshold=0.5):
@@ -288,6 +356,33 @@ class VideoThread(QThread):
                         worker.finished.connect(self.command_finished)
                         self.command_thread.start()
                         self.command_detected = None
+                    elif self.command_detected == "dime_la_hora":
+                        print("VideoThread: Iniciando TimeWorker")
+                        self.command_thread = QThread()
+                        worker = TimeWorker()
+                        worker.moveToThread(self.command_thread)
+                        self.command_thread.started.connect(worker.run)
+                        worker.finished.connect(self.command_thread.quit)
+                        worker.finished.connect(worker.deleteLater)
+                        self.command_thread.finished.connect(self.command_thread.deleteLater)
+                        self.current_command_name = "dime_la_hora"
+                        worker.finished.connect(self.command_finished)
+                        self.command_thread.start()
+                        self.command_detected = None
+                    elif self.command_detected == "juega_barcelona":
+                        print("VideoThread: Iniciando BarcelonaWorker")
+                        self.command_thread = QThread()
+                        worker = BarcelonaWorker()
+                        worker.moveToThread(self.command_thread)
+                        self.command_thread.started.connect(worker.run)
+                        worker.finished.connect(self.command_thread.quit)
+                        worker.finished.connect(worker.deleteLater)
+                        self.command_thread.finished.connect(self.command_thread.deleteLater)
+                        self.current_command_name = "juega_barcelona"
+                        worker.finished.connect(self.command_finished)
+                        self.command_thread.start()
+                        self.command_detected = None
+                #BORRAR SI SE USCA CV(1)        
                 time.sleep(self.frame_delay)
         
             else:
@@ -454,6 +549,14 @@ class CommandListenerThread(QThread):
                 elif any(frase in recognized_text for frase in ["descríbeme la escena", "describeme la escena", "dime la escena", "describe la escena", "detalla la escena"]):
                     print("Comando reconocido: 'describe_escena'")
                     self.command_signal.emit("describe_escena")
+                    self.state = "command_executing"
+                elif "dime la hora" in recognized_text:
+                    print("Comando reconocido: 'dime_la_hora'")
+                    self.command_signal.emit("dime_la_hora")
+                    self.state = "command_executing"
+                elif "barcelona" in recognized_text:
+                    print("Comando reconocido: 'juega_barcelona'")
+                    self.command_signal.emit("juega_barcelona")
                     self.state = "command_executing"
                 else:
                     respuesta_no_entendida()
