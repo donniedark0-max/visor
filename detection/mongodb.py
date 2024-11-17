@@ -19,6 +19,9 @@ partidos_collection = db['partidos']
 detecciones_collection = db['detecciones']
 logs_collection = db['logs']
 usuarios_collection = db['usuarios']
+personas_collection = db['personas']
+
+
 
 print("Conectado a MongoDB correctamente.")
 
@@ -44,6 +47,16 @@ def get_user_data():
     user = usuarios_collection.find_one()
     return user
 
+def guardar_persona(nombre, equipo_favorito, imagen):
+    """Guarda los datos de una persona en la colección 'personas'."""
+    persona = {
+        'nombre': nombre,
+        'equipo_favorito': equipo_favorito,
+        'imagen': imagen,
+        'timestamp': time.time()
+    }
+    result = personas_collection.insert_one(persona)
+    print(f"Persona guardada con ID: {result.inserted_id}")
 def guardar_partido(partido):
     partido['timestamp'] = time.time()
     result = partidos_collection.insert_one(partido)

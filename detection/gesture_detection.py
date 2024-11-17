@@ -18,8 +18,16 @@ import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 from functools import partial
 import requests
-from detection.mongodb import guardar_deteccion, guardar_log
+from detection.mongodb import guardar_deteccion,guardar_persona, guardar_log, personas_collection
 from word2number import w2n
+import face_recognition
+import base64
+from io import BytesIO
+from PIL import Image
+
+# Almacenar datos faciales y nombres
+known_face_encodings = []
+known_face_names = []
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -32,7 +40,8 @@ barcelona_api =os.getenv('BARCA_KEY')
 speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
 speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural"
 
-pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract.exe'
+
 
 # Inicializar MediaPipe y YOLO
 mp_hands = mp.solutions.hands
@@ -56,6 +65,30 @@ contexto = {
     "gestos_detectados": set(),
     "poses_detectadas": set()
 }
+# Coloca la función después de las importaciones y la declaración de las listas known_face_encodings y known_face_names
+def cargar_datos_entrenados():
+    """Carga los datos de la base de datos para el reconocimiento facial."""
+    personas = personas_collection.find()  # Asegúrate de importar personas_collection desde mongodb.py
+    for persona in personas:
+        if "imagen" in persona:
+            try:
+                # Convertir la imagen desde base64 a un array de imagen
+                img_data = base64.b64decode(persona["imagen"])
+                img_array = np.array(Image.open(BytesIO(img_data)))
+                
+                # Verificar que la codificación facial es posible
+                encodings = face_recognition.face_encodings(img_array)
+                if encodings:
+                    known_face_encodings.append(encodings[0])
+                    known_face_names.append(persona['nombre'])
+                else:
+                    print(f"No se pudo encontrar una cara en la imagen de {persona['nombre']}")
+            except Exception as e:
+                print(f"Error procesando la imagen de {persona['nombre']}: {e}")
+    print("Datos entrenados cargados correctamente.")
+
+# Después, asegúrate de que la función `cargar_datos_entrenados()` se llame en `main()` o antes de `reconocer_personas()`.
+
 
 def convertir_texto_a_equipo(text):
     """
@@ -140,7 +173,7 @@ def confirm_input(info_type, info_value):
     if result.reason == speechsdk.ResultReason.RecognizedSpeech:
         recognized_text = result.text.lower().strip()
         print(f"Confirmación reconocida: {recognized_text}")
-        if any(palabra in recognized_text for palabra in ["sí", "si", "correcto", "así es", "see"]):
+        if any(palabra in recognized_text for palabra in ["sí", "si", "correcto","correct", "así es", "see"]):
             return True
         else:
             return False
@@ -168,6 +201,64 @@ def capture_photo(name):
         print("Error: No se pudo capturar la imagen.")
         hablar_texto("Lo siento, no pude tomar la foto.")
         return None
+def capturar_imagen():
+    """Abre la cámara, captura una imagen automáticamente y proporciona un feedback verbal."""
+    hablar_texto("Voy a tomar una foto en 3 segundos. Por favor, prepárate.")
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: No se pudo abrir la cámara.")
+        hablar_texto("Lo siento, no pude acceder a la cámara.")
+        return None
+
+    # Esperar unos segundos antes de capturar la imagen
+    time.sleep(3)
+    
+    ret, frame = cap.read()
+    cap.release()
+    if ret:
+        hablar_texto("Foto tomada correctamente.")
+        return frame
+    else:
+        print("Error: No se pudo capturar la imagen.")
+        hablar_texto("Lo siento, no pude tomar la foto.")
+        return None
+
+
+def registrar_persona():
+    """Registra una nueva persona en la base de datos."""
+    frame = capturar_imagen()
+    _, buffer = cv2.imencode('.jpg', frame)
+    image_base64 = base64.b64encode(buffer).decode('utf-8')
+    while True: 
+        nombre = ask_for_input("Dime su nombre : ")
+        if nombre:
+            if confirm_input("nombre", nombre):
+                break
+            else:
+                        hablar_texto("Entiendo. Intentemos de nuevo.")
+        else:
+                        hablar_texto("No he podido entender tu nombre. Por favor, intentemos de nuevo.")
+
+            # Solicitar el equipo favorito por voz
+    while True:
+                equipo_favorito = ask_for_input("Ahora dime cuál es su equipo favorito.")
+                if equipo_favorito:
+                    if confirm_input("equipo favorito", equipo_favorito):
+                        break
+                    else:
+                        hablar_texto("Entendido. Intentemos de nuevo.")
+                else:
+                    hablar_texto("No he podido entender tu equipo favorito. Por favor, intentemos de nuevo.")
+
+
+            # Tomar la foto
+
+        
+    guardar_persona(nombre, equipo_favorito, image_base64)
+    guardar_log("registro", f"Nueva persona registrada: {nombre}")
+    print("Persona registrada correctamente.")
+    cargar_datos_entrenados()
+
         
 def saludo_inicial(user_name):
     saludos = [
@@ -198,6 +289,23 @@ class TimeWorker(QObject):
             print(f"TimeWorker: Exception occurred: {e}")
         finally:
             self.finished.emit()
+class AgregarPersonaWorker(QObject) :
+    finished = pyqtSignal()
+    
+
+    def __init__(self, frame):
+        super().__init__()
+        self.frame = frame
+    def run(self):
+        try:         
+            print("AgregarPersonaWorker: Iniciando registrar_persona")
+            # Obtener ubicación por voz
+            registrar_persona()
+        except Exception as e:
+            print(f"AgregarPersonaWorker: Exception occurred: {e}")
+        finally:
+            print("AgregarPersonaWorker: Finished run method")
+            self.finished.emit()
 
 class BarcelonaWorker(QObject):
     finished = pyqtSignal()
@@ -209,6 +317,8 @@ class BarcelonaWorker(QObject):
         try:
             import requests
             from detection.mongodb import guardar_partido, guardar_log
+
+
 
             api_key = barcelona_api
             team_id = 81  # ID del FC Barcelona en la API
@@ -443,7 +553,7 @@ class VideoThread(QThread):
         super().__init__()
         self._run_flag = True
         self.command_detected = None
-        self.cap = cv2.VideoCapture(1)
+        self.cap = cv2.VideoCapture(0)
 
         ###############################################################################################################
         #video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
@@ -461,7 +571,8 @@ class VideoThread(QThread):
         self.location = None  # Inicializar la ubicación en None
         self.command_thread = None  # Hilo para ejecutar comandos
         self.current_command_name = None  # Añadido
-        
+    
+
     def run(self):
         while self._run_flag:
             ret, frame = self.cap.read()
@@ -528,6 +639,20 @@ class VideoThread(QThread):
                         worker.finished.connect(self.command_finished)
                         self.command_thread.start()
                         self.command_detected = None
+                    elif self.command_detected == "agregar_persona":
+                        print("VideoThread: Iniciando AgregarPersonaWorker")
+                        self.command_thread = QThread()
+                        worker = AgregarPersonaWorker(frame)
+                        worker.moveToThread(self.command_thread)
+                        self.command_thread.started.connect(worker.run)
+                        worker.finished.connect(self.command_thread.quit)
+                        worker.finished.connect(worker.deleteLater)
+                        self.command_thread.finished.connect(self.command_thread.deleteLater)
+                        self.current_command_name = "agregar_persona"
+                        worker.finished.connect(self.command_finished)
+                        self.command_thread.start()
+                        self.command_detected = None
+                        
                 #BORRAR SI SE USCA CV(1)        
                 #time.sleep(self.frame_delay)
         
@@ -690,7 +815,7 @@ class CommandListenerThread(QThread):
             recognized_text = result.text.lower().strip()
             if recognized_text:
                 self.text_signal.emit(recognized_text)  # Emitir el texto reconocido
-                if "lee lo de la cámara" in recognized_text or "lee lo de la camara" in recognized_text:
+                if "lee lo de la cámara" in recognized_text or "lee lo de la camara, lee " in recognized_text:
                     print("Comando reconocido: 'lee_texto'")
                     self.command_signal.emit("lee_texto")
                     self.state = "command_executing"
@@ -705,6 +830,10 @@ class CommandListenerThread(QThread):
                 elif "barcelona" in recognized_text:
                     print("Comando reconocido: 'juega_barcelona'")
                     self.command_signal.emit("juega_barcelona")
+                    self.state = "command_executing"
+                elif any(agre in recognized_text for agre in ["agregar a persona", "agregar nuevo", "Agregar a persona", "agregar amigo", "agregar"]): 
+                    print("Comando reconocido: 'agregar_persona'")
+                    self.command_signal.emit("agregar_persona")
                     self.state = "command_executing"
                 else:
                     respuesta_no_entendida()
@@ -727,7 +856,7 @@ class CommandListenerThread(QThread):
         self.state = "waiting_response"
 
     def listen_for_response(self):
-        print("Esperando respuesta a '¿Te puedo ayudar en algo más?'...")
+        print("Esperando respuesta a '¿Te puedo ayudar en algo más, Si o No ?'...")
         result = self.recognize_once()
 
         print(f"Resultado del reconocimiento: {result.reason}")
@@ -799,7 +928,7 @@ def perform_detection_and_description(ubicacion):
             "gestos_detectados": set(),
             "poses_detectadas": set()
         }
-        cap = cv2.VideoCapture(1)
+        cap = cv2.VideoCapture(0)
 
         ###############################################################################################################
         #video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
@@ -917,7 +1046,7 @@ def perform_detection_and_description(ubicacion):
         print(descripcion)
         hablar_texto(descripcion)
     except Exception as e:
-        guardar_log("error", f"Error en la detección: {e}")
+        guardar_log("error", f"Error en la detección: {e}")
 
 class MainWindow(QMainWindow):
     def __init__(self):
