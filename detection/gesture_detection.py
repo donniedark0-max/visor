@@ -51,7 +51,7 @@ pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mp_draw = mp.solutions.drawing_utils
 
 # Modelo YOLO
-model = YOLO('yolov10s.pt')
+model = YOLO('yolov10x.pt')
 
 # Variables globales
 capturing = True
@@ -65,6 +65,26 @@ contexto = {
     "gestos_detectados": set(),
     "poses_detectadas": set()
 }
+translations = {
+    "person": "persona",
+    "cell phone": "teléfono",
+    "laptop": "computadora portátil",
+    "car": "auto",
+    "dog": "perro",
+    "cat": "gato",
+    "bottle": "botella",
+    "chair": "silla",
+    "table": "mesa",
+    "walllet": "billetera",
+    "umbrella": "paraguas",
+    "sunglasses": "gafas de sol",
+    "book": "libro",
+    "backpack": "mochila",
+    "shirt": "pantalón",
+    # Agrega más traducciones según sea necesario
+}
+def translate_label(label):
+    return translations.get(label, label)  # Si no hay traducción, devuelve la etiqueta original
 # Coloca la función después de las importaciones y la declaración de las listas known_face_encodings y known_face_names
 def cargar_datos_entrenados():
     """Carga los datos de la base de datos para el reconocimiento facial."""
@@ -89,6 +109,74 @@ def cargar_datos_entrenados():
 
 # Después, asegúrate de que la función `cargar_datos_entrenados()` se llame en `main()` o antes de `reconocer_personas()`.
 
+def detect_and_identify_object():
+    """
+    Detecta objetos en un frame capturado y responde con el objeto más probable.
+    """
+    try:
+        # Inicializar la cámara
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Usar CAP_DSHOW para Windows si aplica
+        if not cap.isOpened():
+            print("Error: No se pudo abrir la cámara.")
+            hablar_texto("Lo siento, no pude acceder a la cámara.")
+            return
+
+        # Configurar la cámara
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+        # Intentar capturar un frame válido
+        max_retries = 5
+        retries = 0
+        frame = None
+
+        while retries < max_retries:
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                break
+            retries += 1
+            print(f"Intentando capturar el frame nuevamente... Intento {retries}/{max_retries}")
+            time.sleep(0.5)
+
+        if frame is None:
+            print("Error: No se pudo capturar un frame válido después de varios intentos.")
+            hablar_texto("Lo siento, no pude capturar la imagen.")
+            return
+
+        print("Frame capturado exitosamente. Iniciando detección de objetos...")
+
+        # Procesar detección de objetos con YOLO
+        try:
+            yolo_results = model(frame, show=False)  # Procesar el frame con YOLO
+            detected_objects = []
+
+            for result in yolo_results:
+                for obj in result.boxes:
+                    class_id = int(obj.cls)
+                    confidence = float(obj.conf)
+                    label = model.names[class_id]
+                    detected_objects.append((label, confidence))
+
+            if detected_objects:
+                # Ordenar por confianza y tomar el objeto más probable
+                detected_objects.sort(key=lambda x: x[1], reverse=True)
+                objeto, confianza = detected_objects[0]
+                objeto_traducido = translate_label(objeto)
+                print(f"Objeto detectado: {objeto_traducido} con confianza {confianza:.2f}")
+                hablar_texto(f"Creo que es un {objeto_traducido} con una confianza de {int(confianza * 100)}%.")
+            else:
+                print("No se detectaron objetos en el frame.")
+                hablar_texto("Lo siento, no pude identificar ningún objeto.")
+        except Exception as e:
+            print(f"Error durante la detección de objetos: {e}")
+            hablar_texto("Ocurrió un error durante la detección de objetos.")
+    except Exception as e:
+        print(f"Error general en detect_and_identify_object: {e}")
+        hablar_texto("Lo siento, ocurrió un error inesperado durante la ejecución.")
+    finally:
+        # Liberar la cámara y limpiar recursos
+        if 'cap' in locals() and cap.isOpened():
+            cap.release()
 
 def convertir_texto_a_equipo(text):
     """
@@ -289,6 +377,76 @@ class TimeWorker(QObject):
             print(f"TimeWorker: Exception occurred: {e}")
         finally:
             self.finished.emit()
+
+
+class ResponderPreguntaWorker(QObject):
+    finished = pyqtSignal()
+
+    def __init__(self, pregunta):
+        super().__init__()
+        self.pregunta = pregunta
+
+    def run(self):
+        try:
+            print("ResponderPreguntaWorker: Generando respuesta breve")
+            from gpt.gpt_description import responder_pregunta, hablar_texto
+
+            # Respuesta breve
+            respuesta = responder_pregunta(self.pregunta)
+            hablar_texto(respuesta)
+
+            # Preguntar si desea más información
+            hablar_texto("¿Quieres más información sobre este tema? Por favor, di sí o no.")
+            respuesta_usuario = self.escuchar_respuesta()
+
+            if "sí" in respuesta_usuario or "si" in respuesta_usuario:
+                hablar_texto("Dame un momento, te doy más información.")
+                respuesta_detallada = responder_pregunta(self.pregunta, detallada=True)  # Solicita respuesta detallada
+                if respuesta_detallada:
+                    hablar_texto(respuesta_detallada)
+                else:
+                    hablar_texto("Lo siento, no puedo proporcionar más información en este momento.")
+            elif "no" in respuesta_usuario:
+                hablar_texto("De acuerdo. Si necesitas algo más, estoy aquí para ayudarte.")
+            else:
+                hablar_texto("No entendí tu respuesta. Por favor, intenta nuevamente si necesitas más ayuda.")
+        except Exception as e:
+            print(f"ResponderPreguntaWorker: Error al procesar: {e}")
+            hablar_texto("Lo siento, no puedo responder en este momento.")
+        finally:
+            self.finished.emit()
+
+    def escuchar_respuesta(self):
+        """
+        Escucha una respuesta del usuario y devuelve el texto reconocido.
+        """
+        from gpt.gpt_description import speechsdk
+        import os
+
+        # Configuración de Azure Speech
+        speech_config = speechsdk.SpeechConfig(
+            subscription=os.getenv('AZURE_SPEECH_KEY'),
+            region=os.getenv('AZURE_REGION')
+        )
+        speech_config.speech_recognition_language = "es-ES"
+        audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+        speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+
+        print("Esperando respuesta del usuario...")
+        result = speech_recognizer.recognize_once_async().get()
+
+        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            recognized_text = result.text.strip().lower()
+            print(f"Texto reconocido: '{recognized_text}'")
+            return recognized_text
+        elif result.reason == speechsdk.ResultReason.NoMatch:
+            print("No se entendió la respuesta. Preguntando de nuevo...")
+            return "No se entendió"
+        else:
+            print("Error en el reconocimiento de voz.")
+            return "Error"
+
+
 class AgregarPersonaWorker(QObject) :
     finished = pyqtSignal()
     
@@ -566,11 +724,13 @@ class VideoThread(QThread):
         #self.frame_delay = 1 / self.fps if self.fps > 0 else 0.066
         ###############################################################################################################
 
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.location = None  # Inicializar la ubicación en None
+        self.current_command_name = None
         self.command_thread = None  # Hilo para ejecutar comandos
-        self.current_command_name = None  # Añadido
+          # Añadido
+        self.current_question = None  # Inicializa la variable pregunta
     
 
     def run(self):
@@ -652,6 +812,24 @@ class VideoThread(QThread):
                         worker.finished.connect(self.command_finished)
                         self.command_thread.start()
                         self.command_detected = None
+                    elif self.command_detected == "responder_pregunta":
+                        print("VideoThread: Iniciando ResponderPreguntaWorker")
+                        self.command_thread = QThread()
+                        worker = ResponderPreguntaWorker(self.current_question)  # Pasa la pregunta al Worker
+                        worker.moveToThread(self.command_thread)  # Mueve el Worker al hilo
+                        self.command_thread.started.connect(worker.run)  # Conecta el inicio del hilo con el método run del Worker
+                        worker.finished.connect(self.command_thread.quit)  # Conecta la señal de finalización del Worker con el cierre del hilo
+                        worker.finished.connect(worker.deleteLater)  # Elimina el Worker cuando termine
+                        self.command_thread.finished.connect(self.command_thread.deleteLater)  # Elimina el hilo cuando termine
+                        self.current_command_name = "responder_pregunta"
+                        worker.finished.connect(self.command_finished)  # Notifica que el comando ha terminado
+                        self.command_thread.start()
+                        self.command_detected = None
+                    elif self.command_detected == "detect_and_identify_object":
+                        print("VideoThread: Ejecutando 'detect_and_identify_object'")
+                        detect_and_identify_object()  # Llamada directa a la función
+                        self.command_detected = None
+
                         
                 #BORRAR SI SE USCA CV(1)        
                 #time.sleep(self.frame_delay)
@@ -749,9 +927,13 @@ class CommandListenerThread(QThread):
     command_signal = pyqtSignal(str)
     text_signal = pyqtSignal(str)
 
-    def __init__(self, user_name):
+    def __init__(self, video_thread, user_name):
         super().__init__()
-        self.user_name = user_name  # Almacenar el nombre del usuario
+        self.video_thread = video_thread  # Guarda referencia de VideoThread
+        self.user_name = user_name  # Guarda el nombre del usuario
+        self._run_flag = True
+        self.state = "waiting_wake_word"
+        
         
         self._run_flag = True
         self.state = "waiting_wake_word"  # Estados: waiting_wake_word, waiting_command, asking_more_help, waiting_response
@@ -835,6 +1017,18 @@ class CommandListenerThread(QThread):
                     print("Comando reconocido: 'agregar_persona'")
                     self.command_signal.emit("agregar_persona")
                     self.state = "command_executing"
+                elif any(frase in recognized_text for frase in ["aitana", "dime", "explícame", "pregunta"]):
+                    print("Comando reconocido: 'responder_pregunta'")
+                    self.video_thread.current_question = recognized_text # Guarda la pregunta en VideoThread
+                    self.command_signal.emit("responder_pregunta")
+                    self.state = "command_executing"
+                elif any(frase in recognized_text for frase in ["qué es esto", "que es esto", "qué tengo en la mano", "que tengo en la mano"]):
+                    print("Comando reconocido: 'detect_and_identify_object'")
+                    self.video_thread.current_question = None  # No es una pregunta específica
+                    self.command_signal.emit("detect_and_identify_object")
+                    self.state = "command_executing"
+                
+
                 else:
                     respuesta_no_entendida()
             else:
@@ -935,8 +1129,8 @@ def perform_detection_and_description(ubicacion):
         #cap = cv2.VideoCapture(video_path)
         ###############################################################################################################
 
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
         total_frames = 0
         start_time = time.time()
@@ -1049,6 +1243,7 @@ def perform_detection_and_description(ubicacion):
         guardar_log("error", f"Error en la detección: {e}")
 
 class MainWindow(QMainWindow):
+    
     def __init__(self):
         super().__init__()
         
@@ -1125,12 +1320,11 @@ class MainWindow(QMainWindow):
         self.thread.start()
 
         # Inicializar el hilo de comandos
-        self.command_thread = CommandListenerThread(self.user_name)
+        self.command_thread = CommandListenerThread(self.thread, self.user_name)   # Pasa VideoThread al CommandListenerThread
         self.command_thread.command_signal.connect(self.thread.receive_command)
         self.command_thread.text_signal.connect(self.update_recognized_text)
         self.thread.command_finished_signal.connect(self.command_thread.on_command_finished)
         self.command_thread.start()
-
 
         # Botón para salir de la aplicación
         self.button_exit = QPushButton("Salir", self)

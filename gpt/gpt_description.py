@@ -103,3 +103,49 @@ def hablar_texto(texto):
         print(f"Síntesis cancelada: {cancellation_details.reason}")
         if cancellation_details.reason == speechsdk.CancellationReason.Error:
             print(f"Detalles del error: {cancellation_details.error_details}")
+def responder_pregunta(pregunta, detallada=False):
+    """
+    Genera una respuesta breve o detallada según el parámetro `detallada`.
+    """
+    print(f"Pregunta recibida: {pregunta}")
+    tipo_respuesta = "breve" if not detallada else "detallada"
+
+    prompt = {
+        "instructions": {
+            "role": "Eres un asistente virtual que responde preguntas en español.",
+            "examples": {
+                "good": [
+                    "Pregunta: ¿Cuál es la capital de Francia?\nRespuesta: La capital de Francia es París.",
+                    "Pregunta: ¿Por qué el cielo es azul?\nRespuesta: Por la dispersión de la luz azul en la atmósfera."
+                ]
+            }
+        },
+        "question": pregunta,
+        "output_format": {
+            "style": "Responde con detalles extensos y profundos." if detallada else "Responde en 1-2 frases como máximo.",
+            "tone": "Amigable y profesional",
+            "length": "Extensa" if detallada else "Breve y concisa"
+        }
+    }
+
+    prompt_json = json.dumps(prompt)
+    print(f"JSON Prompt enviado a Gemini ({tipo_respuesta}): {prompt_json}")
+
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash-002")
+        response = model.generate_content(
+            prompt_json,
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=250 if detallada else 50,  # Tokens para respuestas largas o cortas
+                temperature=0.7 if detallada else 0.5  # Mayor creatividad para respuestas detalladas
+            )
+        )
+        respuesta = response.text.strip()
+        print(f"Respuesta generada por Gemini ({tipo_respuesta}): {respuesta}")
+        return respuesta
+
+    except Exception as e:
+        print(f"Error al generar respuesta con Gemini: {str(e)}")
+        return "Lo siento, no puedo responder en este momento."
+
+

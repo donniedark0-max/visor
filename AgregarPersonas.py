@@ -78,7 +78,7 @@ def registrar_persona():
 
 def reconocer_personas():
     """Reconoce personas en tiempo real usando la cámara."""
-    cap = cv2.VideoCapture(0)
+    
     while True:
         ret, frame = cap.read()
         if not ret:
