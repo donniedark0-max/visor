@@ -3,6 +3,7 @@ import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 import google.generativeai as genai
 import json
+import random
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -20,16 +21,28 @@ speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural"
  
 
 # Función para generar descripción con Gemini
-def generar_descripcion(objetos_finales, gestos_detectados, poses_detectadas, ubicacion):
+def generar_descripcion(objetos_finales, gestos_detectados, poses_detectadas, ubicacion, personas_detectadas=None, equipos_detectados=None):
     # Construcción de la descripción simple basada en la información disponible
     print(f"GEMINI CAPTO:\n - Objetos: {objetos_finales}\n  - Gestos: {gestos_detectados}\n - Poses: {poses_detectadas}\n - Ubicación: {ubicacion}")
      # Estructura de objetos en JSON
 
+    # Procesar personas detectadas y equipos
+    person_descriptions = []
+    if personas_detectadas:
+        for nombre in personas_detectadas:
+            descripcion_persona = f"{nombre} está en la escena."
+            # Decide aleatoriamente si incluir el equipo favorito
+            if equipos_detectados and nombre in equipos_detectados and random.choice([True, False]):
+                equipo = equipos_detectados[nombre]
+                frase_equipo = obtener_frase_equipo(equipo)
+                descripcion_persona += f" Su equipo favorito es {equipo}. {frase_equipo}"
+            person_descriptions.append(descripcion_persona)
     
     # Crear el JSON con objetos, gestos y ubicación
     prompt = {
         "scene": {
             "objects": objetos_finales, 
+            "people": person_descriptions,
             "gestures": list(gestos_detectados) if gestos_detectados else [],
             "location": ubicacion,
             "poses": poses_detectadas
@@ -48,11 +61,13 @@ def generar_descripcion(objetos_finales, gestos_detectados, poses_detectadas, ub
             ],
             "examples": {
                 "good": [
+                    "Ian y otra persona están en la sala, ambos parecen conversar animadamente. El equipo favorito de Ian es FC Barcelona. ¡Visca el Barça!",
+                    "María está en la cocina preparando café. Su equipo favorito es Real Madrid. ¡Hala Madrid!"
                     "Una persona sostiene una botella en la cocina, aparentemente sirviendo alguna bebida.",
                     "Dos personas están sentadas en el sofá de la sala, cada una con un libro en sus manos, muy concentradas en su lectura."
                 ],
                 "bad": [
-                    "Se ha detectado una persona y una botella en la escena.",
+                    "Se ha detectado una persona llamada Ian y una botella en la escena.",
                     "Hay dos personas y dos libros presentes en la ubicación."
                 ]
             }
@@ -86,6 +101,22 @@ def generar_descripcion(objetos_finales, gestos_detectados, poses_detectadas, ub
         print(f"Error al obtener texto de Gemini: {str(e)}")
         return None
 
+def obtener_frase_equipo(equipo):
+    frases_equipos = {
+        "FC Barcelona": "¡Visca el Barça!",
+        "Real Madrid": "¡Hala Madrid!",
+        "Atlético de Madrid": "¡Aúpa Atleti!",
+        "Manchester United": "¡Glory Glory Man United!",
+        "Liverpool": "¡You'll Never Walk Alone!",
+        "Chelsea": "¡Come on you Blues!",
+        "Juventus": "¡Fino Alla Fine!",
+        "AC Milan": "¡Forza Milan!",
+        "Boca Juniors": "¡Dale Boca!",
+        "River Plate": "¡Vamos Millonario!",
+        "Paris Saint-Germain": "¡Allez Paris!",
+        "Alianza Lima": "¡Arriba Alianza! y, abajo la U",
+    }
+    return frases_equipos.get(equipo, "")
 
 # Función para convertir texto a voz usando Azure y reproducirlo en tiempo real
 def hablar_texto(texto):
@@ -112,11 +143,12 @@ def responder_pregunta(pregunta, detallada=False):
 
     prompt = {
         "instructions": {
-            "role": "Eres un asistente virtual que responde preguntas en español.",
+            "role": "Eres un asistente virtual que responde preguntas en español, el lugar desde donde se te pregunta todo es Perú, no lo menciones implicitamente ",
             "examples": {
                 "good": [
                     "Pregunta: ¿Cuál es la capital de Francia?\nRespuesta: La capital de Francia es París.",
-                    "Pregunta: ¿Por qué el cielo es azul?\nRespuesta: Por la dispersión de la luz azul en la atmósfera."
+                    "Pregunta: ¿Por qué el cielo es azul?\nRespuesta: Por la dispersión de la luz azul en la atmósfera.",
+                    "Pregunta: ¿Desde cuando no vamos al mundial?\nRespuesta: Perú no va al mundial desde el mundial en Rusia 2018."
                 ]
             }
         },

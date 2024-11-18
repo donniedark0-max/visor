@@ -28,7 +28,7 @@ from PIL import Image
 # Almacenar datos faciales y nombres
 known_face_encodings = []
 known_face_names = []
-
+known_face_teams = {}
 # Cargar variables de entorno desde .env
 load_dotenv()
 
@@ -40,7 +40,8 @@ barcelona_api =os.getenv('BARCA_KEY')
 speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_region)
 speech_config.speech_synthesis_voice_name = "es-AR-ElenaNeural"
 
-pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract.exe'
+#pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 
 
 # Inicializar MediaPipe y YOLO
@@ -63,7 +64,9 @@ confidence_threshold = 0.5  # Umbral de confianza
 contexto = {
     "objetos_finales": [],
     "gestos_detectados": set(),
-    "poses_detectadas": set()
+    "poses_detectadas": set(),
+    "personas_detectadas": set(),
+    "equipos_detectados": {}
 }
 translations = {
     "person": "persona",
@@ -88,6 +91,10 @@ def translate_label(label):
 # Coloca la función después de las importaciones y la declaración de las listas known_face_encodings y known_face_names
 def cargar_datos_entrenados():
     """Carga los datos de la base de datos para el reconocimiento facial."""
+    known_face_encodings.clear()
+    known_face_names.clear()
+    known_face_teams.clear()
+
     personas = personas_collection.find()  # Asegúrate de importar personas_collection desde mongodb.py
     for persona in personas:
         if "imagen" in persona:
@@ -101,6 +108,8 @@ def cargar_datos_entrenados():
                 if encodings:
                     known_face_encodings.append(encodings[0])
                     known_face_names.append(persona['nombre'])
+                    known_face_teams[persona['nombre']] = persona.get('equipo_favorito', '')
+
                 else:
                     print(f"No se pudo encontrar una cara en la imagen de {persona['nombre']}")
             except Exception as e:
@@ -109,21 +118,23 @@ def cargar_datos_entrenados():
 
 # Después, asegúrate de que la función `cargar_datos_entrenados()` se llame en `main()` o antes de `reconocer_personas()`.
 
+
+
 def detect_and_identify_object():
     """
     Detecta objetos en un frame capturado y responde con el objeto más probable.
     """
     try:
         # Inicializar la cámara
-        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Usar CAP_DSHOW para Windows si aplica
+        cap = cv2.VideoCapture(1)  # Usar CAP_DSHOW para Windows si aplica
         if not cap.isOpened():
             print("Error: No se pudo abrir la cámara.")
             hablar_texto("Lo siento, no pude acceder a la cámara.")
             return
 
         # Configurar la cámara
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
         # Intentar capturar un frame válido
         max_retries = 5
@@ -272,7 +283,7 @@ def confirm_input(info_type, info_value):
 
 def capture_photo(name):
     hablar_texto("Voy a tomar una foto para tu perfil.")
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     if not cap.isOpened():
         print("Error: No se pudo abrir la cámara.")
         hablar_texto("Lo siento, no pude acceder a la cámara.")
@@ -292,7 +303,7 @@ def capture_photo(name):
 def capturar_imagen():
     """Abre la cámara, captura una imagen automáticamente y proporciona un feedback verbal."""
     hablar_texto("Voy a tomar una foto en 3 segundos. Por favor, prepárate.")
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     if not cap.isOpened():
         print("Error: No se pudo abrir la cámara.")
         hablar_texto("Lo siento, no pude acceder a la cámara.")
@@ -358,6 +369,18 @@ def saludo_inicial(user_name):
     ]
     texto = random.choice(saludos)
     hablar_texto(texto)
+
+class DetectAndIdentifyObjectWorker(QObject):
+    finished = pyqtSignal()
+
+    def run(self):
+        try:
+            print("DetectAndIdentifyObjectWorker: Iniciando detect_and_identify_object")
+            detect_and_identify_object()
+        except Exception as e:
+            print(f"DetectAndIdentifyObjectWorker: Exception occurred: {e}")
+        finally:
+            self.finished.emit()
 
 class TimeWorker(QObject):
     finished = pyqtSignal()
@@ -678,7 +701,7 @@ def respuesta_afirmativa(user_name):
 
 def respuesta_negativa(user_name):
     despedidas = [
-        "De acuerdo, si necesitas algo más, solo dime 'Hola, Elara'.",
+        "De acuerdo, si necesitas algo más, solo dime 'Hola, Aitana'.",
         f"Entiendo, estaré aquí si me necesitas. ¡Hasta luego {user_name}!",
         f"Muy bien, que tengas un buen día {user_name}. Estoy aquí si necesitas ayuda.",
         "Está bien, no dudes en llamarme si me necesitas. ¡Hasta pronto!",
@@ -711,7 +734,7 @@ class VideoThread(QThread):
         super().__init__()
         self._run_flag = True
         self.command_detected = None
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(1)
 
         ###############################################################################################################
         #video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
@@ -724,8 +747,8 @@ class VideoThread(QThread):
         #self.frame_delay = 1 / self.fps if self.fps > 0 else 0.066
         ###############################################################################################################
 
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
         self.location = None  # Inicializar la ubicación en None
         self.current_command_name = None
         self.command_thread = None  # Hilo para ejecutar comandos
@@ -826,8 +849,17 @@ class VideoThread(QThread):
                         self.command_thread.start()
                         self.command_detected = None
                     elif self.command_detected == "detect_and_identify_object":
-                        print("VideoThread: Ejecutando 'detect_and_identify_object'")
-                        detect_and_identify_object()  # Llamada directa a la función
+                        print("VideoThread: Iniciando DetectAndIdentifyObjectWorker")
+                        self.command_thread = QThread()
+                        worker = DetectAndIdentifyObjectWorker()
+                        worker.moveToThread(self.command_thread)
+                        self.command_thread.started.connect(worker.run)
+                        worker.finished.connect(self.command_thread.quit)
+                        worker.finished.connect(worker.deleteLater)
+                        self.command_thread.finished.connect(self.command_thread.deleteLater)
+                        self.current_command_name = "detect_and_identify_object"
+                        worker.finished.connect(self.command_finished)
+                        self.command_thread.start()
                         self.command_detected = None
 
                         
@@ -997,15 +1029,15 @@ class CommandListenerThread(QThread):
             recognized_text = result.text.lower().strip()
             if recognized_text:
                 self.text_signal.emit(recognized_text)  # Emitir el texto reconocido
-                if "lee lo de la cámara" in recognized_text or "lee lo de la camara, lee " in recognized_text:
+                if any(frase in recognized_text for frase in ["lee lo de la cámara", "lee lo de la camara", "lee esto", "¿Qué dice acá?", "lee lo que hay aquí", "lee lo que hay aca", "lee lo que hay en la cámara", "lee lo que hay en la camara"]):
                     print("Comando reconocido: 'lee_texto'")
                     self.command_signal.emit("lee_texto")
                     self.state = "command_executing"
-                elif any(frase in recognized_text for frase in ["descríbeme la escena", "describeme la escena", "dime la escena", "describe la escena", "detalla la escena"]):
+                elif any(frase in recognized_text for frase in ["descríbeme la escena", "describeme la escena", "dime la escena", "describe la escena", "detalla la escena", "¿Qué esta pasando aquí?", "¿Qué hay en la cámara?", "¿Qué hay en la camara?", "¿Qué veo aquí?", "¿Qué veo aca?"]):
                     print("Comando reconocido: 'describe_escena'")
                     self.command_signal.emit("describe_escena")
                     self.state = "command_executing"
-                elif "dime la hora" in recognized_text:
+                elif "dime la hora" in recognized_text or "Qué hora es? " in recognized_text:
                     print("Comando reconocido: 'dime_la_hora'")
                     self.command_signal.emit("dime_la_hora")
                     self.state = "command_executing"
@@ -1013,7 +1045,7 @@ class CommandListenerThread(QThread):
                     print("Comando reconocido: 'juega_barcelona'")
                     self.command_signal.emit("juega_barcelona")
                     self.state = "command_executing"
-                elif any(agre in recognized_text for agre in ["agregar a persona", "agregar nuevo", "Agregar a persona", "agregar amigo", "agregar"]): 
+                elif any(agre in recognized_text for agre in ["agregar a persona", "agregar nuevo", "Agregar a persona", "agregar amigo", "agregar", "agregar persona", "agregar a una persona"]): 
                     print("Comando reconocido: 'agregar_persona'")
                     self.command_signal.emit("agregar_persona")
                     self.state = "command_executing"
@@ -1022,7 +1054,7 @@ class CommandListenerThread(QThread):
                     self.video_thread.current_question = recognized_text # Guarda la pregunta en VideoThread
                     self.command_signal.emit("responder_pregunta")
                     self.state = "command_executing"
-                elif any(frase in recognized_text for frase in ["qué es esto", "que es esto", "qué tengo en la mano", "que tengo en la mano"]):
+                elif any(frase in recognized_text for frase in ["qué es esto", "que es esto", "qué tengo en la mano", "que tengo en la mano", "¿Qué tengo en la mano?"]):
                     print("Comando reconocido: 'detect_and_identify_object'")
                     self.video_thread.current_question = None  # No es una pregunta específica
                     self.command_signal.emit("detect_and_identify_object")
@@ -1116,21 +1148,25 @@ def perform_ocr_and_read(frame):
 def perform_detection_and_description(ubicacion):
     try:
 
+        cargar_datos_entrenados()
+
         global contexto
         contexto = {
             "objetos_finales": [],
             "gestos_detectados": set(),
-            "poses_detectadas": set()
+            "poses_detectadas": set(),
+            "personas_detectadas": set(),
+            "equipos_detectados": {}
         }
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(1)
 
         ###############################################################################################################
         #video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
         #cap = cv2.VideoCapture(video_path)
         ###############################################################################################################
 
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
         total_frames = 0
         start_time = time.time()
@@ -1158,8 +1194,20 @@ def perform_detection_and_description(ubicacion):
                     objeto_confianza = f'{model.names[class_id]} {float(confidence):.2f}'
 
                     if confidence >= confidence_threshold:
-                        detected_object_counts[objeto_confianza] += 1
-                        frame_objects_counts[model.names[class_id]] += 1
+                        if model.names[class_id] == "person":
+                            face_names_in_frame = detect_and_recognize_faces(frame)
+                            if face_names_in_frame:
+                                for name in face_names_in_frame:
+                                    detected_object_counts[f"{name} {float(confidence):.2f}"] += 1                                    
+                                    frame_objects_counts[name] += 1
+                            else:
+                                detected_object_counts[objeto_confianza] += 1
+                                frame_objects_counts[model.names[class_id]] += 1
+                        else:                    
+                            detected_object_counts[objeto_confianza] += 1
+                            frame_objects_counts[model.names[class_id]] += 1
+                    else:
+                        pass        
 
             objects_per_frame.append(frame_objects_counts)
 
@@ -1222,7 +1270,9 @@ def perform_detection_and_description(ubicacion):
             objetos_finales,
             ", ".join(contexto["gestos_detectados"]),
             ", ".join(contexto["poses_detectadas"]),
-            ubicacion
+            ubicacion,
+            contexto["personas_detectadas"],
+            contexto["equipos_detectados"]
         )
 
         guardar_deteccion(
@@ -1241,6 +1291,35 @@ def perform_detection_and_description(ubicacion):
         hablar_texto(descripcion)
     except Exception as e:
         guardar_log("error", f"Error en la detección: {e}")
+    
+def detect_and_recognize_faces(frame):
+    face_names_in_frame = []
+    # Convertir el frame de BGR a RGB
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    # Encontrar todas las caras y codificaciones en el frame actual
+    face_locations = face_recognition.face_locations(rgb_frame)
+    face_encodings_in_frame = face_recognition.face_encodings(rgb_frame, face_locations)
+
+    for face_encoding in face_encodings_in_frame:
+        # Comparar la cara con las caras conocidas
+        matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+        name = "Desconocido"
+
+        # Usar la cara conocida con la menor distancia al nuevo encoding
+        face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+        best_match_index = np.argmin(face_distances)
+        if matches[best_match_index]:
+            name = known_face_names[best_match_index]
+            # Agregar el nombre al contexto
+            contexto["personas_detectadas"].add(name)
+            # A veces, agregar el equipo favorito
+            if random.choice([True, False]):
+                team = known_face_teams.get(name, "")
+                if team:
+                    contexto["equipos_detectados"][name] = team
+        face_names_in_frame.append(name)
+    return face_names_in_frame            
 
 class MainWindow(QMainWindow):
     

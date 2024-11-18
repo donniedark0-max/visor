@@ -37,7 +37,7 @@ def cargar_datos_entrenados():
 
 def capturar_imagen():
     """Abre la cámara y captura una imagen al presionar 'c'."""
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -78,7 +78,7 @@ def registrar_persona():
 
 def reconocer_personas():
     """Reconoce personas en tiempo real usando la cámara."""
-    
+    cap = cv2.VideoCapture(1)
     while True:
         ret, frame = cap.read()
         if not ret:
