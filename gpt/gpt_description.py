@@ -134,12 +134,25 @@ def hablar_texto(texto):
         print(f"Síntesis cancelada: {cancellation_details.reason}")
         if cancellation_details.reason == speechsdk.CancellationReason.Error:
             print(f"Detalles del error: {cancellation_details.error_details}")
-def responder_pregunta(pregunta, detallada=False):
+def responder_pregunta(pregunta, detallada=False, conversation_history=None):
     """
-    Genera una respuesta breve o detallada según el parámetro `detallada`.
+    Genera una respuesta breve o detallada según el parámetro `detallada` usando el historial de conversacion.
     """
     print(f"Pregunta recibida: {pregunta}")
     tipo_respuesta = "breve" if not detallada else "detallada"
+
+    if conversation_history is None:
+        conversation_history = []
+
+    # Construir el texto de la conversación
+    conversation_text = ""
+    for message in conversation_history[-6:]:  # Limitar a las últimas 6 interacciones
+        if message['role'] == 'user':
+            conversation_text += f"Usuario: {message['content']}\n"
+        elif message['role'] == 'assistant':
+            conversation_text += f"Asistente: {message['content']}\n"
+
+    conversation_text += f"Usuario: {pregunta}\n"
 
     prompt = {
         "instructions": {
@@ -152,7 +165,7 @@ def responder_pregunta(pregunta, detallada=False):
                 ]
             }
         },
-        "question": pregunta,
+        "conversation": conversation_text,
         "output_format": {
             "style": "Responde con detalles extensos y profundos." if detallada else "Responde en 1-2 frases como máximo.",
             "tone": "Amigable y profesional",

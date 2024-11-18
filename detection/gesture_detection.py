@@ -405,9 +405,10 @@ class TimeWorker(QObject):
 class ResponderPreguntaWorker(QObject):
     finished = pyqtSignal()
 
-    def __init__(self, pregunta):
+    def __init__(self, pregunta, conversation_history):
         super().__init__()
         self.pregunta = pregunta
+        self.conversation_history = conversation_history
 
     def run(self):
         try:
@@ -415,8 +416,12 @@ class ResponderPreguntaWorker(QObject):
             from gpt.gpt_description import responder_pregunta, hablar_texto
 
             # Respuesta breve
-            respuesta = responder_pregunta(self.pregunta)
+            respuesta = responder_pregunta(self.pregunta, conversation_history=self.conversation_history)
             hablar_texto(respuesta)
+
+            # Actualizar el historial de conversación
+            self.conversation_history.append({"role": "user", "content": self.pregunta})
+            self.conversation_history.append({"role": "assistant", "content": respuesta})
 
             # Preguntar si desea más información
             hablar_texto("¿Quieres más información sobre este tema? Por favor, di sí o no.")
@@ -424,9 +429,10 @@ class ResponderPreguntaWorker(QObject):
 
             if "sí" in respuesta_usuario or "si" in respuesta_usuario:
                 hablar_texto("Dame un momento, te doy más información.")
-                respuesta_detallada = responder_pregunta(self.pregunta, detallada=True)  # Solicita respuesta detallada
+                respuesta_detallada = responder_pregunta(self.pregunta, detallada=True, conversation_history=self.conversation_history)
                 if respuesta_detallada:
                     hablar_texto(respuesta_detallada)
+                    self.conversation_history.append({"role": "assistant", "content": respuesta_detallada})                    
                 else:
                     hablar_texto("Lo siento, no puedo proporcionar más información en este momento.")
             elif "no" in respuesta_usuario:
@@ -730,9 +736,10 @@ class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
     command_finished_signal = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, conversation_history):
         super().__init__()
         self._run_flag = True
+        self.conversation_history = conversation_history  # Añadido
         self.command_detected = None
         self.cap = cv2.VideoCapture(1)
 
@@ -838,7 +845,7 @@ class VideoThread(QThread):
                     elif self.command_detected == "responder_pregunta":
                         print("VideoThread: Iniciando ResponderPreguntaWorker")
                         self.command_thread = QThread()
-                        worker = ResponderPreguntaWorker(self.current_question)  # Pasa la pregunta al Worker
+                        worker = ResponderPreguntaWorker(self.current_question, self.conversation_history)  # Pasar el historial
                         worker.moveToThread(self.command_thread)  # Mueve el Worker al hilo
                         self.command_thread.started.connect(worker.run)  # Conecta el inicio del hilo con el método run del Worker
                         worker.finished.connect(self.command_thread.quit)  # Conecta la señal de finalización del Worker con el cierre del hilo
@@ -959,10 +966,11 @@ class CommandListenerThread(QThread):
     command_signal = pyqtSignal(str)
     text_signal = pyqtSignal(str)
 
-    def __init__(self, video_thread, user_name):
+    def __init__(self, video_thread, user_name, conversation_history):
         super().__init__()
         self.video_thread = video_thread  # Guarda referencia de VideoThread
         self.user_name = user_name  # Guarda el nombre del usuario
+        self.conversation_history = conversation_history
         self._run_flag = True
         self.state = "waiting_wake_word"
         
@@ -1332,6 +1340,7 @@ class MainWindow(QMainWindow):
         # Variable para almacenar el nombre del usuario
         self.user_name = ""
         self.favorite_team = ""
+        self.conversation_history = []
 
         if not check_user_data():
             # Solicitar el nombre por voz
@@ -1393,13 +1402,13 @@ class MainWindow(QMainWindow):
         self.text_label = QLabel(self)
         self.layout.addWidget(self.text_label)
 
-        # Inicializar el hilo de video
-        self.thread = VideoThread()
+         # Pasar el historial a VideoThread
+        self.thread = VideoThread(self.conversation_history)
         self.thread.change_pixmap_signal.connect(self.update_image)
         self.thread.start()
 
         # Inicializar el hilo de comandos
-        self.command_thread = CommandListenerThread(self.thread, self.user_name)   # Pasa VideoThread al CommandListenerThread
+        self.command_thread = CommandListenerThread(self.thread, self.user_name, self.conversation_history)
         self.command_thread.command_signal.connect(self.thread.receive_command)
         self.command_thread.text_signal.connect(self.update_recognized_text)
         self.thread.command_finished_signal.connect(self.command_thread.on_command_finished)
