@@ -334,9 +334,9 @@ def registrar_persona():
             if confirm_input("nombre", nombre):
                 break
             else:
-                        hablar_texto("Entiendo. Intentemos de nuevo.")
+                hablar_texto("Entiendo. Intentemos de nuevo.")
         else:
-                        hablar_texto("No he podido entender tu nombre. Por favor, intentemos de nuevo.")
+            hablar_texto("No he podido entender su nombre. Por favor, intentemos de nuevo.")
 
             # Solicitar el equipo favorito por voz
     while True:
@@ -347,7 +347,7 @@ def registrar_persona():
                     else:
                         hablar_texto("Entendido. Intentemos de nuevo.")
                 else:
-                    hablar_texto("No he podido entender tu equipo favorito. Por favor, intentemos de nuevo.")
+                    print("No he podido entender tu equipo favorito. Por favor, intentemos de nuevo.")
 
 
             # Tomar la foto
@@ -365,7 +365,22 @@ def saludo_inicial(user_name):
         f"¡Hola {user_name}! ¿Cómo puedo asistirte hoy?",
         f"¡Buenas {user_name}! Dime, ¿cómo puedo ayudarte?",
         f"Hola {user_name}, estoy aquí para ayudarte. ¿Qué necesitas?",
-        f"¡Hola {user_name}! Estoy lista para ayudarte. ¿En qué te puedo asistir?"
+        f"¡Hola {user_name}! Estoy lista para ayudarte. ¿En qué te puedo asistir?",
+        f"Hola, {user_name}. ¿En qué puedo ser útil hoy?",
+        f"¡Hey {user_name}! ¿Qué necesitas que haga por ti?",
+        f"Hola {user_name}, espero que estés bien. ¿Cómo puedo ayudarte?",
+        f"¡Buenos días {user_name}! ¿Cómo puedo asistirte en este momento?",
+        f"¡Hola de nuevo, {user_name}! Estoy lista para lo que necesites.",
+        f"Hola {user_name}, encantada de verte de nuevo. ¿Qué puedo hacer por ti?",
+        f"Hola {user_name}, ¿cómo va tu día? ¿Te ayudo con algo?",
+        f"¡Hola, {user_name}! ¿Qué tal si empezamos? Dime, ¿en qué puedo ayudarte?",
+        f"Hola {user_name}, siempre estoy aquí para ayudarte. ¿Qué necesitas?",
+        f"¡Hola {user_name}! Listos para trabajar juntos. ¿Qué necesitas de mí?",
+        f"Hola {user_name}, ¿cómo estás hoy? Dime cómo puedo ayudarte.",
+        f"¡Hola {user_name}! Estoy preparada para ayudarte. ¿Qué necesitas?",
+        f"Hola {user_name}, me alegra escucharte. ¿Qué puedo hacer por ti hoy?",
+        f"¡Hola, {user_name}! Dime en qué puedo asistirte, estoy lista.",
+        f"Hola {user_name}, ¿qué necesitas que haga hoy? Estoy a tu disposición."
     ]
     texto = random.choice(saludos)
     hablar_texto(texto)
@@ -667,7 +682,22 @@ def respuesta_no_entendida():
         "Disculpa, no capté eso. ¿Puedes decirlo de nuevo?",
         "Hmm, no estoy segura de lo que quieres decir. ¿Me lo repites?",
         "No entendí el comando. ¿Podrías repetirlo?",
-        "Perdón, no te he entendido bien. ¿Puedes repetir?"
+        "Perdón, no te he entendido bien. ¿Puedes repetir?",
+        "Lo siento, creo que no entendí bien. ¿Me lo explicas otra vez?",
+        "No estoy segura de qué quieres decir. ¿Puedes intentarlo de nuevo?",
+        "Perdón, parece que no te entendí. ¿Puedes repetirlo más claro?",
+        "Hmm, creo que no entendí eso. ¿Puedes decirlo de otra manera?",
+        "Disculpa, no logré entender. ¿Lo intentas de nuevo?",
+        "Creo que no capté eso correctamente. ¿Puedes volver a intentarlo?",
+        "No estoy muy segura de lo que intentas decir. ¿Podrías explicarlo otra vez?",
+        "Lo siento, no estoy segura de lo que quisiste decir. ¿Me ayudas repitiéndolo?",
+        "Hmm, no logré comprender eso. ¿Podrías repetirlo para mí?",
+        "No entendí bien, ¿podrías intentarlo de otra forma?",
+        "Creo que no entendí lo que dijiste. ¿Me ayudas repitiendo?",
+        "Lo siento, eso no lo entendí bien. ¿Puedes decirlo de nuevo, por favor?",
+        "Disculpa, parece que no capté bien lo que dijiste. ¿Puedes explicarlo otra vez?",
+        "Creo que no escuché correctamente. ¿Me lo repites, por favor?",
+        "Hmm, no entendí eso. ¿Puedes ser un poco más claro?"
     ]
     texto = random.choice(respuestas)
     hablar_texto(texto)
@@ -678,18 +708,38 @@ def preguntar_mas_ayuda():
         "¿Necesitas algo más?",
         "¿Hay algo más en lo que pueda asistirte?",
         "¿Te ayudo con algo más?",
-        "¿Hay algo más que pueda hacer por ti?"
+        "¿Hay algo más que pueda hacer por ti?",
+        "¿Quieres que haga algo más por ti?",
+        "¿Puedo ayudarte con algo adicional?",
+        "¿Tienes algo más en mente en lo que pueda ayudarte?",
+        "¿Hay otra cosa con la que necesites ayuda?",
+        "¿Te puedo apoyar en algo más?",
+        "¿Hay algo más que pueda resolver por ti?",
+        "¿En qué más puedo serte útil?",
+        "¿Te queda alguna duda o necesitas algo más?",
+        "¿Hay algo más que te gustaría saber o hacer?",
+        "¿Puedo ofrecerte ayuda con algo más?"
     ]
     texto = random.choice(respuestas)
     hablar_texto(texto)
 
 def saludo_inicial(user_name):
     saludos = [
-        f"Hola,{user_name} ¿en qué puedo ayudarte?",
-        f"¡Hola! {user_name} ¿Cómo puedo asistirte hoy?",
-        "¡Buenas! Dime, ¿cómo puedo ayudarte?",
-        f"Hola, {user_name} estoy aquí para ayudarte. ¿Qué necesitas?",
-        "¡Hola! Estoy lista para ayudarte. ¿En qué te puedo asistir?"
+         f"Hola, {user_name}. ¿Cómo te encuentras hoy? ¿En qué puedo asistirte?",
+        f"¡Hola, {user_name}! Estoy lista para ayudarte, dime, ¿qué necesitas?",
+        f"Hola {user_name}, ¿cómo puedo asistirte el día de hoy?",
+        f"¡Hola, {user_name}! Espero que estés bien. ¿En qué puedo ayudarte?",
+        f"¡Hola, {user_name}! Estoy aquí para ti. ¿Qué necesitas?",
+        f"Buenas, {user_name}. ¿Cómo te puedo ayudar?",
+        f"¡Hola, {user_name}! Estoy lista para lo que necesites. ¿Cómo te ayudo?",
+        f"Hola, {user_name}. Cuéntame, ¿en qué puedo asistirte?",
+        f"¡Hola {user_name}! Estoy disponible para ayudarte. ¿Qué necesitas?",
+        f"Hola {user_name}, dime, ¿cómo puedo ayudarte hoy?",
+        f"¡Hola! ¿Cómo estás? Estoy lista para ayudarte.",
+        f"Hola {user_name}, ¿cómo va tu día? ¿Necesitas algo?",
+        f"Hola, {user_name}. Estoy aquí para ayudarte. ¿Qué necesitas de mí?",
+        f"¡Hola! ¿Qué puedo hacer por ti hoy?",
+        f"Hola {user_name}, espero que todo esté bien. ¿En qué te puedo ayudar?"
     ]
     texto = random.choice(saludos)
     hablar_texto(texto)
@@ -697,10 +747,20 @@ def saludo_inicial(user_name):
 def respuesta_afirmativa(user_name):
     respuestas = [
         f"Perfecto, {user_name}. ¿Qué deseas que haga?",
-        f"Claro, {user_name}, dime en qué puedo ayudarte.",
-        f"Por supuesto, {user_name}, ¿cómo puedo asistirte?",
-        f"¡Excelente, {user_name}! ¿Qué necesitas?",
-        f"Muy bien, {user_name}, estoy escuchando. ¿En qué te puedo ayudar?"
+        f"Claro, dime en qué puedo ayudarte.",
+        f"Por supuesto, ¿cómo puedo asistirte?",
+        f"¡Excelente! ¿Qué necesitas?",
+        f"Muy bien, estoy escuchando. ¿En qué te puedo ayudar?",
+        "Claro, dime lo que necesitas.",
+        "Perfecto, estoy lista para ayudarte. ¿Qué necesitas?",
+        "Entendido, dime cómo puedo asistirte.",
+        f"Por supuesto, {user_name}, estoy aquí para lo que necesites.",
+        "De acuerdo, cuéntame qué necesitas.",
+        f"¡Claro que sí, {user_name}! Estoy lista para ayudarte.",
+        "Sin problema, ¿cómo te ayudo?",
+        "Listo, dime cómo puedo asistirte.",
+        "Perfecto, hablemos de lo que necesitas.",
+        f"¡Adelante, {user_name}! ¿Qué hago por ti?"
     ]
     texto = random.choice(respuestas)
     hablar_texto(texto)
@@ -708,10 +768,20 @@ def respuesta_afirmativa(user_name):
 def respuesta_negativa(user_name):
     despedidas = [
         "De acuerdo, si necesitas algo más, solo dime 'Hola, Aitana'.",
-        f"Entiendo, estaré aquí si me necesitas. ¡Hasta luego {user_name}!",
-        f"Muy bien, que tengas un buen día {user_name}. Estoy aquí si necesitas ayuda.",
+        f"Entendido, estaré aquí si me necesitas. ¡Hasta luego, {user_name}!",
+        "Muy bien, que tengas un buen día. Estoy aquí si necesitas ayuda.",
         "Está bien, no dudes en llamarme si me necesitas. ¡Hasta pronto!",
-        f"Claro, me avisas si puedo ayudarte en algo más. ¡Cuídate {user_name}!"
+        "Claro, me avisas si puedo ayudarte en algo más. ¡Cuídate!",
+        "De acuerdo, recuerda que estoy aquí si necesitas algo.",
+        f"Entiendo, {user_name}. Si necesitas algo, no dudes en llamarme.",
+        "Perfecto, estaré esperando si me necesitas.",
+        f"Está bien, disfruta tu día. ¡Nos vemos luego, {user_name}!",
+        "Claro que sí, estaré aquí para cuando necesites ayuda.",
+        "Sin problema, ¡cuídate y nos vemos pronto!",
+        "De acuerdo, no dudes en decir 'Hola, Aitana' cuando necesites algo.",
+        f"¡Nos vemos, {user_name}! Estoy a tu disposición cuando quieras.",
+        "Perfecto, cualquier cosa aquí estaré.",
+        "Muy bien, que tengas un excelente día."
     ]
     texto = random.choice(despedidas)
     hablar_texto(texto)
@@ -1037,11 +1107,11 @@ class CommandListenerThread(QThread):
             recognized_text = result.text.lower().strip()
             if recognized_text:
                 self.text_signal.emit(recognized_text)  # Emitir el texto reconocido
-                if any(frase in recognized_text for frase in ["lee lo de la cámara", "lee lo de la camara", "lee esto", "¿Qué dice acá?", "lee lo que hay aquí", "lee lo que hay aca", "lee lo que hay en la cámara", "lee lo que hay en la camara"]):
+                if any(frase in recognized_text for frase in ["lee lo de la cámara", "lee lo de la camara", "lee esto", "¿Qué dice acá?", "¿Qué dice aquí?", "lee lo que hay aquí",  "lee lo que hay aca", "lee lo que hay en la cámara", "lee lo que hay en la camara", "¿Qué dice en la pantalla?","léelo", "¿Qué puedo leer aquí?", "¿Qué dice eso?", "¿Qué pone acá?", "¿Qué pone aquí?", "léeme esto", "léeme lo que aparece", "lee la pantalla", "léeme lo que ves", "¿Qué hay escrito aquí?", "¿Qué hay escrito acá?", "¿Puedes leer esto?", "¿Qué texto hay aquí?", "¿Puedes decirme qué dice?", "léeme el texto de la cámara", "¿Qué está escrito aquí?","¿Qué dice esto?", "lee, texto", "dime lo que pone aquí", "lee esto de la cámara", "léelo de la pantalla", "¿Qué palabras hay acá?","¿Qué texto aparece aquí?", "lee esta parte", "léeme lo que detectas", "¿Qué texto detectas?"]): 
                     print("Comando reconocido: 'lee_texto'")
                     self.command_signal.emit("lee_texto")
                     self.state = "command_executing"
-                elif any(frase in recognized_text for frase in ["descríbeme la escena", "describeme la escena", "dime la escena", "describe la escena", "detalla la escena", "¿Qué esta pasando aquí?", "¿Qué hay en la cámara?", "¿Qué hay en la camara?", "¿Qué veo aquí?", "¿Qué veo aca?"]):
+                elif any(frase in recognized_text for frase in ["descríbeme la escena", "describeme la escena", "dime la escena", "describe la escena", "detalla la escena", "¿Qué esta pasando aquí?", "¿Qué hay en la cámara?", "¿Qué hay en la camara?", "¿Qué veo aquí?", "¿Qué veo aca?", "Escribe la escena"]):
                     print("Comando reconocido: 'describe_escena'")
                     self.command_signal.emit("describe_escena")
                     self.state = "command_executing"
@@ -1090,34 +1160,35 @@ class CommandListenerThread(QThread):
         self.state = "waiting_response"
 
     def listen_for_response(self):
-        print("Esperando respuesta a '¿Te puedo ayudar en algo más, Si o No ?'...")
+        print("Esperando respuesta a '¿Te puedo ayudar en algo más, o No ?'...")
         result = self.recognize_once()
 
         print(f"Resultado del reconocimiento: {result.reason}")
         print(f"Texto reconocido: '{result.text}'")
-
+        
+        self.state = "waiting_command"
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
             recognized_text = result.text.lower()
-            if any(palabra in recognized_text for palabra in ["sí", "si"]):
-                print("El usuario desea más ayuda.")
-                respuesta_afirmativa(self.user_name)
-                self.state = "waiting_command"
-            elif "no" in recognized_text:
+            if "no" in recognized_text:
                 print("El usuario no desea más ayuda.")
                 respuesta_negativa(self.user_name)
                 self.state = "waiting_wake_word"
             else:
-                respuesta_no_entendida()
+                print("El usuario desea continuar.")
+                self.state = "waiting_command"
         elif result.reason == speechsdk.ResultReason.NoMatch:
             print("No se pudo reconocer ninguna voz")
-            hablar_texto("No he escuchado nada. Por favor, di 'sí' o 'no'.")
+            hablar_texto("No he escuchado nada. Por favor, mencione en que lo puedo ayudar o para finalizar diga 'no'.")
+            self.state = "waiting_command"  # Sigue esperando comandos
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             print(f"Reconocimiento cancelado: {cancellation_details.reason}")
             if cancellation_details.reason == speechsdk.CancellationReason.Error:
                 print(f"Detalles del error: {cancellation_details.error_details}")
+            self.state = "waiting_command"  # Sigue esperando comandos
         else:
             print(f"Resultado desconocido: {result.reason}")
+            self.state = "waiting_command" # Sigue esperando comandos
 
     def recognize_once(self):
         # Configurar el reconocimiento de voz
@@ -1352,7 +1423,7 @@ class MainWindow(QMainWindow):
                     else:
                         hablar_texto("Entiendo. Intentemos de nuevo.")
                 else:
-                    hablar_texto("No he podido entender tu nombre. Por favor, intentemos de nuevo.")
+                    print("No he podido entender tu nombre. Por favor, intentemos de nuevo.")
 
             # Solicitar el equipo favorito por voz
             while True:
