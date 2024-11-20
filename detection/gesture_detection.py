@@ -814,7 +814,7 @@ class VideoThread(QThread):
         self.cap = cv2.VideoCapture(1)
 
         ###############################################################################################################
-        #video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
+        #video_path = "/Users/dark0/Documents/Visor/VIDEO PRUEBA 2.webm"
         #self.cap = cv2.VideoCapture(video_path)
 
         # Obtener la tasa de fotogramas (FPS) del video
@@ -1240,7 +1240,7 @@ def perform_detection_and_description(ubicacion):
         cap = cv2.VideoCapture(1)
 
         ###############################################################################################################
-        #video_path = "/Users/dark0/Documents/Visor/A walk in Shibuya, Tokyo.webm"
+        #video_path = "/Users/dark0/Documents/Visor/VIDEO PRUEBA 2.webm"
         #cap = cv2.VideoCapture(video_path)
         ###############################################################################################################
 
