@@ -126,7 +126,7 @@ def detect_and_identify_object():
     """
     try:
         # Inicializar la cámara
-        cap = cv2.VideoCapture(1)  # Usar CAP_DSHOW para Windows si aplica
+        cap = cv2.VideoCapture(0)  # Usar CAP_DSHOW para Windows si aplica
         if not cap.isOpened():
             print("Error: No se pudo abrir la cámara.")
             hablar_texto("Lo siento, no pude acceder a la cámara.")
@@ -272,7 +272,13 @@ def confirm_input(info_type, info_value):
     if result.reason == speechsdk.ResultReason.RecognizedSpeech:
         recognized_text = result.text.lower().strip()
         print(f"Confirmación reconocida: {recognized_text}")
-        if any(palabra in recognized_text for palabra in ["sí", "si", "correcto","correct", "así es", "see"]):
+        if any(palabra in recognized_text for palabra in ["sí", "si", "correcto", "correct", "así es", "see","exacto", "claro", "por supuesto", "afirmativo", "ok", 
+    "okay", "vale", "de acuerdo", "seguro", "cierto", 
+    "confirmado", "obvio", "evidente", "ya", "claro que sí",
+    "ciertamente", "entendido", "comprendido", "aceptado", 
+    "perfecto", "está bien", "muy bien", "así", "okey", 
+    "yes", "sure", "of course", "that's right", "indeed", 
+    "roger", "affirmative", "agreed", "yeah", "yep"]):
             return True
         else:
             return False
@@ -283,7 +289,7 @@ def confirm_input(info_type, info_value):
 
 def capture_photo(name):
     hablar_texto("Voy a tomar una foto para tu perfil.")
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Error: No se pudo abrir la cámara.")
         hablar_texto("Lo siento, no pude acceder a la cámara.")
@@ -303,7 +309,7 @@ def capture_photo(name):
 def capturar_imagen():
     """Abre la cámara, captura una imagen automáticamente y proporciona un feedback verbal."""
     hablar_texto("Voy a tomar una foto en 3 segundos. Por favor, prepárate.")
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Error: No se pudo abrir la cámara.")
         hablar_texto("Lo siento, no pude acceder a la cámara.")
@@ -697,7 +703,21 @@ def respuesta_no_entendida():
         "Lo siento, eso no lo entendí bien. ¿Puedes decirlo de nuevo, por favor?",
         "Disculpa, parece que no capté bien lo que dijiste. ¿Puedes explicarlo otra vez?",
         "Creo que no escuché correctamente. ¿Me lo repites, por favor?",
-        "Hmm, no entendí eso. ¿Puedes ser un poco más claro?"
+        "Hmm, no entendí eso. ¿Puedes ser un poco más claro?",
+        "No estoy segura de qué quisiste decir. ¿Puedes intentarlo nuevamente?",
+        "Disculpa, no comprendí bien. ¿Lo puedes repetir?",
+        "Perdón, no estoy segura de lo que intentaste decir. ¿Puedes explicarlo mejor?",
+        "Lo siento, eso no quedó claro. ¿Podrías repetirlo?",
+        "Parece que no entendí bien. ¿Puedes intentar de nuevo?",
+        "Hmm, no capté eso. ¿Podrías intentarlo una vez más?",
+        "Lo siento, no logré entenderlo. ¿Me ayudas explicándolo de nuevo?",
+        "Disculpa, no pude comprenderlo bien. ¿Puedes repetirlo de otra manera?",
+        "Creo que no capté lo que dijiste. ¿Puedes ser un poco más específico?",
+        "Hmm, eso no lo entendí. ¿Puedes decírmelo de otra forma?",
+        "Perdón, no logré entender. ¿Puedes intentar nuevamente?",
+        "¿Podrías repetir eso? No lo entendí bien.",
+        "Lo siento, no estoy segura de qué quisiste decir. ¿Me lo repites, por favor?",
+        "Parece que no entendí del todo. ¿Puedes intentarlo de nuevo?"
     ]
     texto = random.choice(respuestas)
     hablar_texto(texto)
@@ -811,7 +831,7 @@ class VideoThread(QThread):
         self._run_flag = True
         self.conversation_history = conversation_history  # Añadido
         self.command_detected = None
-        self.cap = cv2.VideoCapture(1)
+        self.cap = cv2.VideoCapture(0)
 
         ###############################################################################################################
         #video_path = "/Users/dark0/Documents/Visor/VIDEO PRUEBA 2.webm"
@@ -1081,7 +1101,21 @@ class CommandListenerThread(QThread):
                 print("No se reconoció ninguna voz o el texto está vacío.")
             else:
                 print(f"Texto reconocido: {recognized_text}")
-                if any(frase in recognized_text for frase in ["hola aitana", "hola, aitana", "hola aitana", "hola, aitana"]):
+                if any(frase in recognized_text for frase in [    "hola aitana", "hola, aitana", "buenas aitana", 
+    "qué tal aitana", "aitana hola", "saludos aitana", 
+    "holi aitana", "aitana, ¿cómo estás?", "hey aitana",
+    "hola preciosa aitana", "hola amiga aitana", 
+    "hola guapa aitana", "hola linda aitana", 
+    "aitana querida", "buenas tardes aitana", 
+    "buenos días aitana", "buenas noches aitana", 
+    "hola aitana bonita", "hola aitana, aquí estoy", 
+    "holaaa aitana", "holis aitana", "aitanaaa", 
+    "oye aitana", "aitana te hablo", "aitana, escúchame", 
+    "hola ai", "hola ana", "hey ana", 
+    "ai preciosa", "ai linda", "hola ait", 
+    "aitana chula", "hola amor aitana", "aitana guapísima",
+    "hola reina aitana", "hola majestad aitana",
+    "mi amiga aitana", "aitanita", "hola tita aitana"]):
                     print("Wake word detectado. Activando escucha de comandos.")
                     saludo_inicial(self.user_name)
                     self.state = "waiting_command"
@@ -1111,11 +1145,29 @@ class CommandListenerThread(QThread):
                     print("Comando reconocido: 'lee_texto'")
                     self.command_signal.emit("lee_texto")
                     self.state = "command_executing"
-                elif any(frase in recognized_text for frase in ["descríbeme la escena", "describeme la escena", "dime la escena", "describe la escena", "detalla la escena", "¿Qué esta pasando aquí?", "¿Qué hay en la cámara?", "¿Qué hay en la camara?", "¿Qué veo aquí?", "¿Qué veo aca?", "Escribe la escena"]):
+                elif any(frase in recognized_text for frase in ["descríbeme la escena", "describeme la escena", "describe lo que ves", 
+    "dime qué ves", "dime qué está pasando", "¿qué hay aquí?", 
+    "¿qué ves en la cámara?", "¿qué está sucediendo?", "¿qué sucede ahora?", 
+    "¿qué se ve aquí?", "cuéntame la escena", "relátame qué ves", 
+    "dame detalles de la escena", "explícame lo que ves", 
+    "detalla lo que está pasando", "¿qué estoy viendo?", "describe el entorno", 
+    "háblame de la escena", "cuéntame qué pasa aquí", "¿qué muestra la cámara?", 
+    "¿qué se percibe aquí?", "¿qué puedo saber de esta escena?", 
+    "¿qué hay frente a mí?", "¿qué hay enfrente?", "dime qué sucede"]):
                     print("Comando reconocido: 'describe_escena'")
                     self.command_signal.emit("describe_escena")
                     self.state = "command_executing"
-                elif "dime la hora" in recognized_text or "Qué hora es? " in recognized_text:
+                elif any(frase in recognized_text for frase in [    "¿qué hora es?", "dime la hora", "¿puedes decirme la hora?", 
+    "¿qué hora tienes?", "¿sabes la hora?", "¿qué hora marca?", 
+    "¿qué hora será?", "dime qué hora es", "¿puedes decirme qué hora es?", 
+    "dame la hora", "¿me dices la hora?", "¿puedes decir la hora?", 
+    "quiero saber la hora", "necesito saber la hora", "¿qué hora tenemos?", 
+    "¿me puedes decir la hora?", "¿qué hora es ahora?", 
+    "¿qué hora es en este momento?", "dime la hora actual", 
+    "dime la hora que es", "¿puedes darme la hora?", 
+    "¿qué hora tienes ahora?", "¿qué hora es ahorita?", 
+    "¿me das la hora?", "¿qué hora es, por favor?", 
+    "¿puedes decirme qué hora marca?"]):
                     print("Comando reconocido: 'dime_la_hora'")
                     self.command_signal.emit("dime_la_hora")
                     self.state = "command_executing"
@@ -1123,7 +1175,17 @@ class CommandListenerThread(QThread):
                     print("Comando reconocido: 'juega_barcelona'")
                     self.command_signal.emit("juega_barcelona")
                     self.state = "command_executing"
-                elif any(agre in recognized_text for agre in ["agregar a persona", "agregar nuevo", "Agregar a persona", "agregar amigo", "agregar", "agregar persona", "agregar a una persona"]): 
+                elif any(agre in recognized_text for agre in [    "agregar a persona", "agregar nuevo", "agregar amigo", 
+    "agregar", "agregar persona", "agregar a una persona", 
+    "añadir persona", "añadir amigo", "añadir a una persona", 
+    "crear nuevo contacto", "crear nuevo registro", "añadir contacto", 
+    "nuevo contacto", "añadir un amigo", "agregar contacto", 
+    "añadir alguien", "crear registro nuevo", "añadir a la lista", 
+    "poner en la lista", "registrar persona", "registrar a alguien", 
+    "guardar persona", "guardar nuevo contacto", "insertar persona", 
+    "insertar contacto", "quiero agregar a alguien", 
+    "puedes agregar a alguien", "me ayudas a agregar una persona", 
+    "registrar amigo", "registrar nuevo"]): 
                     print("Comando reconocido: 'agregar_persona'")
                     self.command_signal.emit("agregar_persona")
                     self.state = "command_executing"
@@ -1132,7 +1194,18 @@ class CommandListenerThread(QThread):
                     self.video_thread.current_question = recognized_text # Guarda la pregunta en VideoThread
                     self.command_signal.emit("responder_pregunta")
                     self.state = "command_executing"
-                elif any(frase in recognized_text for frase in ["qué es esto", "que es esto", "qué tengo en la mano", "que tengo en la mano", "¿Qué tengo en la mano?"]):
+                elif any(frase in recognized_text for frase in [    "¿me puedes decir qué es esto?", "¿puedes decirme qué es esto?", 
+    "qué tengo en la mano", "que tengo en la mano", 
+    "¿qué tengo en la mano?", "¿qué es lo que tengo?", 
+    "dime qué tengo en la mano", "descríbeme qué tengo aquí", 
+    "¿puedes decirme qué tengo?", "explícame qué tengo aquí", 
+    "dime qué es esto", "¿puedes decirme qué es lo que estoy sosteniendo?", 
+    "qué estoy sosteniendo", "¿qué tengo aquí?", "¿qué es esto que toco?", 
+    "descríbeme esto", "dime qué estoy tocando", 
+    "¿qué tengo enfrente?", "¿qué es lo que veo?", 
+    "explícame qué es esto", "¿puedes ayudarme a identificar esto?", 
+    "identifica esto", "dime qué es lo que estoy tocando", 
+    "¿qué es lo que tengo en las manos?", "¿qué puedo saber de esto?"]):
                     print("Comando reconocido: 'detect_and_identify_object'")
                     self.video_thread.current_question = None  # No es una pregunta específica
                     self.command_signal.emit("detect_and_identify_object")
@@ -1191,11 +1264,12 @@ class CommandListenerThread(QThread):
             self.state = "waiting_command" # Sigue esperando comandos
 
     def recognize_once(self):
-        # Configurar el reconocimiento de voz
+    # Configurar el reconocimiento de voz
         speech_recognizer = speechsdk.SpeechRecognizer(speech_config=self.speech_config_recognition)
-        # Ajustar los tiempos de espera si es necesario
+    
+    # Ajustar los tiempos de espera a medio segundo
         self.speech_config_recognition.set_property(
-            speechsdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, '10000')  # 10 segundos
+            speechsdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, '500')  # Medio segundo
 
         result = speech_recognizer.recognize_once_async().get()
         return result
@@ -1237,7 +1311,7 @@ def perform_detection_and_description(ubicacion):
             "personas_detectadas": set(),
             "equipos_detectados": {}
         }
-        cap = cv2.VideoCapture(1)
+        cap = cv2.VideoCapture(0)
 
         ###############################################################################################################
         #video_path = "/Users/dark0/Documents/Visor/VIDEO PRUEBA 2.webm"
